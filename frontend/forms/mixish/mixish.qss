@@ -1,0 +1,775 @@
+/* Mixish design system - the single source of visual styling.
+ * See MIXISH_DESIGN_SYSTEM.md for tokens and rules.
+ * Selectors are property-based, so this sheet can be applied to Mixish root
+ * widgets without changing OBS's own dock or dialog styling. */
+
+/* ------------------------------------------------------------------ text */
+QLabel[mixishRole="section"] {
+	color: #8C8C8C;
+}
+QLabel[mixishRole="title"] {
+	color: #F1F1F1;
+	font-size: 14px;
+	font-weight: 700;
+}
+QLabel[mixishRole="body"] {
+	color: #F1F1F1;
+	font-size: 12px;
+	font-weight: 400;
+}
+QLabel[mixishRole="muted"] {
+	color: #8C8C8C;
+	font-size: 12px;
+}
+QLabel[mixishRole="error"] {
+	color: #E5484D;
+	font-size: 12px;
+}
+
+/* --------------------------------------------------------------- buttons */
+QToolButton[mixishVariant]::menu-button {
+	width: 18px;
+	border-left: 1px solid #3A3A3A;
+}
+QToolButton[mixishVariant]::menu-arrow {
+	image: url(:/res/images/chevron-down.svg);
+	width: 8px;
+	height: 8px;
+}
+QToolButton[mixishVariant="secondary"]::menu-button {
+	width: 18px;
+	border-left: 1px solid #3A3A3A;
+}
+QToolButton[mixishVariant="onAir"]::menu-button {
+	border-left: 1px solid #E5484D;
+}
+
+QPushButton[mixishVariant="primary"],
+QToolButton[mixishVariant="primary"] {
+	background-color: #4C8DFF;
+	color: #0B1220;
+	border: 1px solid #4C8DFF;
+	border-radius: 4px;
+	padding: 0 12px;
+	font-size: 12px;
+	font-weight: 700;
+}
+QPushButton[mixishVariant="primary"]:hover,
+QToolButton[mixishVariant="primary"]:hover {
+	background-color: #6AA0FF;
+	border-color: #6AA0FF;
+}
+QPushButton[mixishVariant="primary"]:pressed,
+QToolButton[mixishVariant="primary"]:pressed {
+	background-color: #3B78E0;
+	border-color: #3B78E0;
+}
+QPushButton[mixishVariant="primary"]:disabled,
+QToolButton[mixishVariant="primary"]:disabled {
+	background-color: #202020;
+	color: #5E5E5E;
+	border-color: #2E2E2E;
+}
+
+QPushButton[mixishVariant="secondary"],
+QToolButton[mixishVariant="secondary"] {
+	background-color: #2A2A2A;
+	color: #F1F1F1;
+	border: 1px solid #3A3A3A;
+	border-radius: 4px;
+	padding: 0 12px;
+	font-size: 12px;
+	font-weight: 700;
+}
+QPushButton[mixishVariant="secondary"]:hover,
+QToolButton[mixishVariant="secondary"]:hover {
+	background-color: #333333;
+	border-color: #555555;
+}
+QPushButton[mixishVariant="secondary"]:pressed,
+QToolButton[mixishVariant="secondary"]:pressed {
+	background-color: #1C1C1C;
+}
+QPushButton[mixishVariant="secondary"]:disabled,
+QToolButton[mixishVariant="secondary"]:disabled {
+	background-color: #202020;
+	color: #5E5E5E;
+	border-color: #2E2E2E;
+}
+
+QPushButton[mixishVariant="icon"],
+QToolButton[mixishVariant="icon"] {
+	background-color: #2A2A2A;
+	border: 1px solid #3A3A3A;
+	border-radius: 4px;
+	padding: 0;
+}
+QPushButton[mixishVariant="icon"]:hover,
+QToolButton[mixishVariant="icon"]:hover {
+	background-color: #333333;
+	border-color: #555555;
+}
+QPushButton[mixishVariant="icon"]:pressed,
+QToolButton[mixishVariant="icon"]:pressed {
+	background-color: #1C1C1C;
+}
+
+QPushButton[mixishVariant="danger"],
+QToolButton[mixishVariant="danger"] {
+	background-color: rgba(229, 72, 77, 30);
+	color: #E5484D;
+	border: 1px solid #E5484D;
+	border-radius: 4px;
+	padding: 0 12px;
+	font-size: 12px;
+	font-weight: 700;
+}
+QPushButton[mixishVariant="danger"]:hover,
+QToolButton[mixishVariant="danger"]:hover {
+	background-color: #E5484D;
+	color: #F7F7F2;
+}
+QPushButton[mixishVariant="danger"]:pressed,
+QToolButton[mixishVariant="danger"]:pressed {
+	background-color: #C93A3F;
+	border-color: #C93A3F;
+	color: #F7F7F2;
+}
+
+/* ------------------------------------------------------- button states */
+QPushButton[mixishState="selected"],
+QToolButton[mixishState="selected"] {
+	background-color: #4C8DFF;
+	color: #0B1220;
+	border: 1px solid #4C8DFF;
+}
+QPushButton[mixishState="selected"]:hover,
+QToolButton[mixishState="selected"]:hover {
+	background-color: #6AA0FF;
+	border-color: #6AA0FF;
+}
+
+QPushButton[mixishState="onAir"],
+QToolButton[mixishState="onAir"] {
+	background-color: #C0392B;
+	color: #F7F7F2;
+	border: 1px solid #C0392B;
+}
+QPushButton[mixishState="onAir"]:hover,
+QToolButton[mixishState="onAir"]:hover {
+	background-color: #D14537;
+	border-color: #D14537;
+}
+
+QPushButton[mixishState="assigned"],
+QToolButton[mixishState="assigned"] {
+	background-color: #2A2A2A;
+	color: #F1F1F1;
+	border: 1px solid #3A3A3A;
+}
+QPushButton[mixishState="assigned"]:hover,
+QToolButton[mixishState="assigned"]:hover {
+	background-color: #333333;
+	border-color: #555555;
+}
+
+QPushButton[mixishState="empty"],
+QToolButton[mixishState="empty"] {
+	background-color: #202020;
+	color: #8C8C8C;
+	border: 1px solid #3A3A3A;
+}
+QPushButton[mixishState="empty"]:hover,
+QToolButton[mixishState="empty"]:hover {
+	background-color: #2A2A2A;
+	color: #F1F1F1;
+}
+
+/* -------------------------------------------------------- input controls */
+QComboBox[mixishControl="true"],
+QSpinBox[mixishControl="true"],
+QLineEdit[mixishControl="true"] {
+	background-color: #2A2A2A;
+	color: #F1F1F1;
+	border: 1px solid #3A3A3A;
+	border-radius: 4px;
+	padding: 0 6px;
+	font-size: 12px;
+	min-height: 26px;
+}
+QComboBox[mixishControl="true"]:hover,
+QSpinBox[mixishControl="true"]:hover,
+QLineEdit[mixishControl="true"]:hover {
+	border-color: #555555;
+}
+QComboBox[mixishControl="true"]:disabled,
+QSpinBox[mixishControl="true"]:disabled,
+QLineEdit[mixishControl="true"]:disabled {
+	color: #5E5E5E;
+	background-color: #202020;
+	border-color: #2E2E2E;
+}
+QComboBox[mixishControl="true"] QAbstractItemView {
+	background-color: #202020;
+	color: #F1F1F1;
+	border: 1px solid #3A3A3A;
+	selection-background-color: #4C8DFF;
+	selection-color: #0B1220;
+}
+
+/* --------------------------------------------------------------- top bar */
+QToolBar#mixishTopBar {
+	background-color: #181818;
+	border: 0px;
+	border-bottom: 1px solid #3A3A3A;
+	padding: 0 12px;
+	spacing: 4px;
+}
+QToolBar#mixishTopBar QToolButton {
+	background: transparent;
+	color: #F1F1F1;
+	border: 1px solid transparent;
+	border-radius: 4px;
+	padding: 0 10px;
+	font-size: 12px;
+	font-weight: 700;
+}
+QToolBar#mixishTopBar QToolButton:hover {
+	background-color: #333333;
+	border-color: #3A3A3A;
+}
+QToolBar#mixishTopBar QToolButton:pressed {
+	background-color: #1C1C1C;
+}
+QToolBar#mixishTopBar QToolButton:disabled {
+	color: #5E5E5E;
+}
+QToolBar#mixishTopBar QToolButton::menu-indicator {
+	image: url(:/res/images/chevron-down.svg);
+	width: 8px;
+	height: 8px;
+	subcontrol-position: right center;
+	right: 4px;
+}
+QToolBar#mixishTopBar::separator {
+	background-color: #3A3A3A;
+	width: 1px;
+	margin: 8px 4px;
+}
+QLabel#mixishLogo {
+	color: #F1F1F1;
+}
+
+/* ------------------------------------------------- monitor headers */
+QLabel[mixishRole="previewHeader"] {
+	background-color: #1D9E75;
+	color: #F7F7F2;
+	font-size: 12px;
+	font-weight: 700;
+	padding: 0 12px;
+}
+QLabel[mixishRole="programHeader"] {
+	background-color: #C0392B;
+	color: #F7F7F2;
+	font-size: 12px;
+	font-weight: 700;
+	padding: 0 12px;
+}
+
+/* ------------------------------------------------------ transition column */
+QWidget#mixishTransitionPanel {
+	background-color: #181818;
+	border-left: 1px solid #3A3A3A;
+}
+QWidget#mixishTransitionPanel QSpinBox {
+	background-color: #2A2A2A;
+	color: #F1F1F1;
+	border: 1px solid #3A3A3A;
+	border-radius: 4px;
+	padding: 0 6px;
+	font-size: 12px;
+}
+QWidget#mixishTransitionPanel QSlider::groove:horizontal {
+	height: 4px;
+	background-color: #2A2A2A;
+	border: 1px solid #3A3A3A;
+	border-radius: 2px;
+}
+QWidget#mixishTransitionPanel QSlider::sub-page:horizontal {
+	background-color: #4C8DFF;
+	border-radius: 2px;
+}
+QWidget#mixishTransitionPanel QSlider::handle:horizontal {
+	background-color: #F1F1F1;
+	width: 10px;
+	margin: -5px 0px;
+	border-radius: 5px;
+}
+QWidget#mixishTransitionPanel QSlider::handle:horizontal:hover {
+	background-color: #FFFFFF;
+}
+QWidget#mixishTransitionPanel QPushButton[mixishRole="preset"] {
+	padding: 0 2px;
+	font-size: 12px;
+	font-weight: 700;
+}
+
+QScrollArea#mixishTransitionScroll,
+QScrollArea#mixishTransitionList {
+	background: transparent;
+	border: 0px;
+}
+QWidget#mixishTransitionContent,
+QWidget#mixishTransitionListContent {
+	background: transparent;
+}
+
+/* ------------------------------------------------------------ overlay strip */
+QWidget#mixishOverlayStrip {
+	background: transparent;
+	border-top: 1px solid #2B2B2B;
+}
+QPushButton[mixishRole="overlayToggle"] {
+	font-size: 14px;
+	font-weight: 700;
+	padding: 0px;
+}
+QPushButton[mixishRole="tileAction"] {
+	padding: 0 8px;
+	font-size: 12px;
+}
+QPushButton[mixishRole="tileOverlay"] {
+	padding: 0px;
+	font-size: 12px;
+	font-weight: 700;
+}
+QPushButton#mixishOverlayAllOff,
+QPushButton#mixishOverlayEdit {
+	padding: 0 8px;
+}
+
+/* --------------------------------------------------------------- input bar */
+QWidget#mixishInputBar {
+	background-color: #141414;
+	border-top: 1px solid #3A3A3A;
+}
+QScrollArea#mixishTileScroll,
+QWidget#mixishTileScrollContent {
+	background: transparent;
+	border: 0px;
+}
+
+/* ----------------------------------------------------------- video controls */
+QFrame#mixishVideoControls {
+	background: transparent;
+	border: 0px;
+}
+QFrame#mixishVideoControls QPushButton {
+	background-color: #2A2A2A;
+	border: 1px solid #3A3A3A;
+	border-radius: 4px;
+	padding: 0px;
+}
+QFrame#mixishVideoControls QPushButton:hover {
+	background-color: #333333;
+	border-color: #555555;
+}
+QFrame#mixishVideoControls QPushButton:disabled {
+	background-color: #202020;
+	border-color: #2E2E2E;
+}
+QFrame#mixishVideoControls QLabel {
+	color: #B8B8B8;
+	font-size: 12px;
+}
+QFrame#mixishVideoControls QSlider::groove:horizontal {
+	height: 4px;
+	background-color: #3A3A3A;
+	border: 0px;
+	border-radius: 2px;
+}
+QFrame#mixishVideoControls QSlider::sub-page:horizontal {
+	background-color: #4C8DFF;
+	border-radius: 2px;
+}
+QFrame#mixishVideoControls QSlider::handle:horizontal {
+	background-color: #F1F1F1;
+	width: 12px;
+	margin: -5px 0px;
+	border-radius: 6px;
+}
+
+/* -------------------------------------------------------------- audio mixer */
+QFrame#mixishAudioMixer {
+	background-color: #181818;
+	border-left: 1px solid #3A3A3A;
+}
+QFrame#mixishAudioMixer QScrollArea {
+	background: transparent;
+	border: 0px;
+}
+QFrame#mixishMixerCard {
+	background-color: #202020;
+	border: 1px solid #3A3A3A;
+	border-radius: 4px;
+}
+QFrame#mixishMasterCard {
+	background-color: #202020;
+	border: 1px solid #4C8DFF;
+	border-radius: 4px;
+}
+QFrame#mixishMixerCard QFrame,
+QFrame#mixishMasterCard QFrame {
+	background: transparent;
+	border: 0px;
+}
+QFrame#mixishMixerCard QLabel,
+QFrame#mixishMasterCard QLabel {
+	color: #F1F1F1;
+	font-size: 12px;
+}
+QFrame#mixishMixerCard QLabel#volLabel,
+QFrame#mixishMasterCard QLabel#volLabel {
+	color: #B8B8B8;
+	font-size: 11px;
+}
+QFrame#mixishMixerCard QSlider::groove:horizontal,
+QFrame#mixishMasterCard QSlider::groove:horizontal {
+	height: 4px;
+	background-color: #2A2A2A;
+	border: 0px;
+	border-radius: 2px;
+}
+QFrame#mixishMixerCard QSlider::sub-page:horizontal,
+QFrame#mixishMasterCard QSlider::sub-page:horizontal {
+	background-color: #4C8DFF;
+	border-radius: 2px;
+}
+QFrame#mixishMixerCard QSlider::handle:horizontal,
+QFrame#mixishMasterCard QSlider::handle:horizontal {
+	background-color: #F1F1F1;
+	width: 10px;
+	margin: -4px 0px;
+	border-radius: 5px;
+}
+QFrame#mixishMixerCard QPushButton,
+QFrame#mixishMasterCard QPushButton {
+	background: transparent;
+	border: 0px;
+}
+
+/* --------------------------------------------------------------- bottom bar */
+QFrame#mixishBottomBar {
+	background-color: #181818;
+	border-top: 1px solid #3A3A3A;
+}
+
+QListWidget#mixishRecordingFormats {
+	background-color: #202020;
+	border: 1px solid #3A3A3A;
+	border-radius: 4px;
+	padding: 4px;
+}
+QListWidget#mixishRecordingFormats::item {
+	color: #B8B8B8;
+	padding: 8px 10px;
+	border-radius: 3px;
+}
+QListWidget#mixishRecordingFormats::item:selected {
+	background-color: #4C8DFF;
+	color: #0B1220;
+}
+QListWidget#mixishRecordingFormats::item:hover:!selected {
+	background-color: #2A2A2A;
+	color: #F1F1F1;
+}
+
+/* ------------------------------------------------------------- input tiles */
+QFrame#mixishInputTile {
+	background-color: #202020;
+	border: 1px solid #3A3A3A;
+	border-radius: 4px;
+}
+QFrame#mixishInputTile[mixishState="selected"] {
+	border: 1px solid #4C8DFF;
+}
+QFrame#mixishInputTile[mixishState="preview"] {
+	border: 1px solid #1D9E75;
+}
+QFrame#mixishInputTile[mixishState="program"] {
+	border: 1px solid #C0392B;
+}
+QFrame#mixishTileHeader {
+	background-color: #2A2A2A;
+	border: 0px;
+	border-radius: 3px;
+}
+QFrame#mixishInputTile[mixishState="preview"] QFrame#mixishTileHeader {
+	background-color: #1D9E75;
+}
+QFrame#mixishInputTile[mixishState="program"] QFrame#mixishTileHeader {
+	background-color: #C0392B;
+}
+QLabel#mixishTileNumber,
+QLabel#mixishTileName {
+	color: #F1F1F1;
+	font-size: 12px;
+	font-weight: 700;
+}
+QLabel#mixishPvwBadge {
+	background-color: #101010;
+	color: #1D9E75;
+	border: 1px solid #1D9E75;
+	border-radius: 3px;
+	padding: 0px 3px;
+	font-size: 10px;
+	font-weight: 700;
+}
+QLabel#mixishPgmBadge {
+	background-color: #101010;
+	color: #C0392B;
+	border: 1px solid #C0392B;
+	border-radius: 3px;
+	padding: 0px 3px;
+	font-size: 10px;
+	font-weight: 700;
+}
+QLabel#mixishThumb {
+	background-color: #101010;
+	border: 1px solid #3A3A3A;
+}
+
+/* ------------------------------------------------------------ overlay panel */
+QDialog#mixishOverlayPanel {
+	background-color: #181818;
+}
+QFrame#mixishOverlayRow {
+	background-color: #202020;
+	border: 1px solid #3A3A3A;
+	border-radius: 4px;
+}
+QLabel#mixishOverlayChip {
+	background-color: #2A2A2A;
+	color: #F1F1F1;
+	border: 1px solid #3A3A3A;
+	border-radius: 4px;
+	font-size: 12px;
+	font-weight: 700;
+}
+QLabel#mixishOverlayState {
+	color: #8C8C8C;
+	font-size: 12px;
+	font-weight: 700;
+}
+QLabel#mixishOverlayState[mixishState="onAir"] {
+	color: #C0392B;
+}
+
+/* ------------------------------------------------------------ add input dialog */
+QDialog#OBSBasicSourceSelect {
+	background-color: #181818;
+}
+QDialog#OBSBasicSourceSelect #dialogInner,
+QDialog#OBSBasicSourceSelect #selectTypeFrame,
+QDialog#OBSBasicSourceSelect #sourcesFrame {
+	background-color: #181818;
+}
+QDialog#OBSBasicSourceSelect #sourceTypeList {
+	background-color: #202020;
+	color: #F1F1F1;
+	border: 1px solid #3A3A3A;
+	border-radius: 4px;
+}
+QDialog#OBSBasicSourceSelect #sourceTypeList::item {
+	padding: 6px;
+	color: #B8B8B8;
+}
+QDialog#OBSBasicSourceSelect #sourceTypeList::item:selected {
+	background-color: #4C8DFF;
+	color: #0B1220;
+}
+QDialog#OBSBasicSourceSelect #sourceSelectTitle {
+	color: #F1F1F1;
+	font-size: 14px;
+	font-weight: 700;
+}
+QDialog#OBSBasicSourceSelect #sourceSelectDescription {
+	color: #B8B8B8;
+	font-size: 12px;
+}
+QDialog#OBSBasicSourceSelect #mixishRecentTypesFrame {
+	background-color: #181818;
+	border-bottom: 1px solid #3A3A3A;
+}
+QDialog#OBSBasicSourceSelect #mixishRecentTypesFrame QPushButton {
+	background-color: #2A2A2A;
+	color: #F1F1F1;
+	border: 1px solid #3A3A3A;
+	border-radius: 4px;
+	padding: 4px 8px;
+	font-size: 12px;
+}
+QDialog#OBSBasicSourceSelect #mixishRecentTypesFrame QPushButton:hover {
+	background-color: #333333;
+	border-color: #555555;
+}
+QDialog#OBSBasicSourceSelect #mixishMediaPanel {
+	background-color: #202020;
+	border: 1px solid #3A3A3A;
+	border-radius: 4px;
+}
+QDialog#OBSBasicSourceSelect #mixishMediaList {
+	background-color: #161616;
+	color: #F1F1F1;
+	border: 1px solid #3A3A3A;
+}
+QDialog#OBSBasicSourceSelect #createNewSource,
+QDialog#OBSBasicSourceSelect #mixishCreateInputButton {
+	background-color: #4C8DFF;
+	color: #0B1220;
+	border: 1px solid #4C8DFF;
+	border-radius: 4px;
+	font-weight: 700;
+	padding: 6px 12px;
+}
+QDialog#OBSBasicSourceSelect #createNewSource:hover,
+QDialog#OBSBasicSourceSelect #mixishCreateInputButton:hover {
+	background-color: #6AA0FF;
+	border-color: #6AA0FF;
+}
+QDialog#OBSBasicSourceSelect #createNewSource:disabled,
+QDialog#OBSBasicSourceSelect #mixishCreateInputButton:disabled {
+	background-color: #202020;
+	color: #5E5E5E;
+	border-color: #2E2E2E;
+}
+
+/* ------------------------------------------------------- input properties */
+QDialog#MixishInputProperties {
+	background-color: #181818;
+}
+QFrame#mixishPropsHeader {
+	background-color: #181818;
+	border-bottom: 1px solid #3A3A3A;
+}
+QLabel#mixishPropsTab {
+	background-color: #4C8DFF;
+	color: #0B1220;
+	font-size: 10px;
+	font-weight: 700;
+	padding: 0 10px;
+	border-radius: 4px;
+}
+QLabel#mixishPropsTitle {
+	color: #F1F1F1;
+	font-size: 14px;
+	font-weight: 700;
+}
+QLabel#mixishPropsSubtitle {
+	color: #B8B8B8;
+	font-size: 12px;
+}
+QListWidget#mixishPropsSidebar {
+	background-color: #202020;
+	border: 0px;
+	outline: 0px;
+}
+QListWidget#mixishPropsSidebar::item {
+	color: #B8B8B8;
+	padding: 8px 12px;
+	border-left: 2px solid transparent;
+}
+QListWidget#mixishPropsSidebar::item:selected {
+	background-color: #2A2A2A;
+	color: #F1F1F1;
+	border-left: 2px solid #4C8DFF;
+}
+QListWidget#mixishPropsSidebar::item:hover:!selected {
+	background-color: #262626;
+}
+QFrame#mixishPropsFooter {
+	background-color: #181818;
+	border-top: 1px solid #3A3A3A;
+}
+QFrame#mixishPropsHost {
+	background-color: #202020;
+}
+QFrame#mixishPropsPreview {
+	background-color: #101010;
+	border-top: 1px solid #3A3A3A;
+}
+QWidget#mixishPropertiesView,
+QWidget#mixishPropertiesView QWidget {
+	background-color: #202020;
+	color: #F1F1F1;
+}
+QWidget#mixishPropertiesView QLabel {
+	background: transparent;
+	color: #F1F1F1;
+	font-size: 12px;
+}
+QWidget#mixishPropertiesView QLineEdit,
+QWidget#mixishPropertiesView QComboBox,
+QWidget#mixishPropertiesView QSpinBox,
+QWidget#mixishPropertiesView QDoubleSpinBox,
+QWidget#mixishPropertiesView QTextEdit,
+QWidget#mixishPropertiesView QPlainTextEdit {
+	background-color: #2A2A2A;
+	color: #F1F1F1;
+	border: 1px solid #3A3A3A;
+	border-radius: 4px;
+	padding: 3px;
+}
+QWidget#mixishPropertiesView QComboBox QAbstractItemView {
+	background-color: #202020;
+	color: #F1F1F1;
+	border: 1px solid #3A3A3A;
+	selection-background-color: #4C8DFF;
+	selection-color: #0B1220;
+}
+QWidget#mixishPropertiesView QCheckBox,
+QWidget#mixishPropertiesView QRadioButton {
+	background: transparent;
+	color: #F1F1F1;
+	spacing: 6px;
+}
+QWidget#mixishPropertiesView QPushButton {
+	background-color: #2A2A2A;
+	color: #F1F1F1;
+	border: 1px solid #3A3A3A;
+	border-radius: 4px;
+	padding: 4px 10px;
+	font-size: 12px;
+	font-weight: 700;
+}
+QWidget#mixishPropertiesView QPushButton:hover {
+	background-color: #333333;
+	border-color: #555555;
+}
+QWidget#mixishPropertiesView QGroupBox {
+	color: #F1F1F1;
+	border: 1px solid #3A3A3A;
+	border-radius: 4px;
+	margin-top: 8px;
+}
+QWidget#mixishPropertiesView QGroupBox::title {
+	subcontrol-origin: margin;
+	left: 8px;
+	padding: 0 4px;
+}
+QWidget#mixishPropertiesView QScrollArea {
+	background-color: #202020;
+	border: 0px;
+}
+QWidget#mixishPropertiesView QListWidget {
+	background-color: #202020;
+	color: #F1F1F1;
+	border: 1px solid #3A3A3A;
+	border-radius: 4px;
+}
+
+/* --------------------------------------------------------------- splitters */
+QSplitter#mixishMainSplitter::handle:vertical,
+QSplitter#mixishInputSplitter::handle:horizontal {
+	background-color: #2A2A2A;
+}
