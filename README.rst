@@ -1,79 +1,103 @@
-OBS Studio <https://obsproject.com>
-===================================
+# Mixish
 
-.. image:: https://github.com/obsproject/obs-studio/actions/workflows/push.yaml/badge.svg?branch=master
-   :alt: OBS Studio Build Status - GitHub Actions
-   :target: https://github.com/obsproject/obs-studio/actions/workflows/push.yaml?query=branch%3Amaster
+**A live production switcher built on OBS Studio.**
 
-.. image:: https://badges.crowdin.net/obs-studio/localized.svg
-   :alt: OBS Studio Translation Project Progress
-   :target: https://crowdin.com/project/obs-studio
+Mixish turns OBS Studio into a hardware-style switcher: Preview/Program monitors,
+scene tiles, a transition column, four overlay channels and a docked audio mixer,
+while keeping the OBS engine (scenes, sources, transitions, encoding) underneath.
 
-.. image:: https://img.shields.io/discord/348973006581923840.svg?label=&logo=discord&logoColor=ffffff&color=7389D8&labelColor=6A7EC2
-   :alt: OBS Studio Discord Server
-   :target: https://obsproject.com/discord
+> **Status:** early development (`0.0.1`). Expect rough edges; not yet recommended
+> for unattended live production.
 
-What is OBS Studio?
--------------------
+## Features
 
-OBS Studio is software designed for capturing, compositing, encoding,
-recording, and streaming video content, efficiently.
+- **Preview / Program layout** with colored monitor headers and keyboard/mouse switching.
+- **Input tiles** with live thumbnails, color tags, Cut, per-tile overlay assignment
+  buttons `1 2 3 4`, audio mute and an overflow menu.
+- **Transition column** with Cut, Fade, Fade to Color, Stinger, FTB, duration presets,
+  T-bar and a scrollable list of OBS transitions.
+- **Four overlay channels (OV1-OV4)** rendered above Program, independent of
+  Cut / Fade / T-bar. Per-channel assignment, on/off, audio and fade editor.
+- **Audio mixer** docked next to the input tiles: per-input faders, mute, meters and
+  monitor toggles, plus a master strip for the first audio output device.
+- **Media transport** for the selected input (seek, play/pause, restart, previous/next).
+- **Input Properties** dialog with a dark OBS property form and a large live preview.
+- **Recording / Streaming settings** dialogs modeled after a hardware switcher.
+- **One design system**: a single `mixish.qss` stylesheet with semantic colors,
+  three text sizes and four button variants.
 
-It's distributed under the GNU General Public License v2 (or any later
-version) - see the accompanying COPYING file for more details.
+## Requirements
 
-Quick Links
------------
+- Windows 10/11 x64
+- Visual Studio 2022 or newer Build Tools with the C++ workload
+- Windows SDK 10.0.22621 or newer
+- CMake 3.30+
+- Git
+- OBS Studio build dependencies (see the upstream OBS build instructions; the
+  dependency bundle is not committed to this repository)
 
-- Website: https://obsproject.com
+## Build
 
-- Help/Documentation/Guides: https://github.com/obsproject/obs-studio/wiki
+The upstream OBS build documentation applies. A typical Windows build:
 
-- Forums: https://obsproject.com/forum/
+```powershell
+cmake --preset windows-x64
+cmake --build build_x64_local --config RelWithDebInfo --target obs-studio
+```
 
-- Build Instructions: https://github.com/obsproject/obs-studio/wiki/Install-Instructions
+Run the portable build:
 
-- Developer/API Documentation: https://obsproject.com/docs
+```powershell
+build_x64_local\rundir\RelWithDebInfo\bin\64bit\obs64.exe --portable
+```
 
-- Donating/backing/sponsoring: https://obsproject.com/contribute
+The upstream README is kept as `README.rst` for the original OBS build details.
 
-- Bug Tracker: https://github.com/obsproject/obs-studio/issues
+## Installer
 
-Contributing
-------------
+An Inno Setup 7 script is provided at `installer/mixish.iss`. It packages
+`bin`, `core` and `data` from the RelWithDebInfo rundir, excluding PDBs and the
+portable config folder, and creates Start Menu/desktop shortcuts and an uninstaller.
 
-- If you would like to help fund or sponsor the project, you can do so
-  via `Patreon <https://www.patreon.com/obsproject>`_, `OpenCollective
-  <https://opencollective.com/obsproject>`_, or `PayPal
-  <https://www.paypal.me/obsproject>`_.  See our `contribute page
-  <https://obsproject.com/contribute>`_ for more information.
+```powershell
+& "C:\Program Files\Inno Setup 7\ISCC.exe" installer\mixish.iss
+```
 
-- If you wish to contribute code to the project, please make sure to
-  read the coding and commit guidelines:
-  https://github.com/obsproject/obs-studio/blob/master/CONTRIBUTING.md
-  
-- Code for the project follows the code style guidelines, located
-  here: https://github.com/obsproject/obs-studio/blob/master/CODESTYLE.md
+The build product is not committed; attach installers to GitHub Releases.
 
-- Developer/API documentation can be found here:
-  https://obsproject.com/docs
+## Repository layout
 
-- If you wish to contribute translations, do not submit pull requests.
-  Instead, please use Crowdin.  For more information read this page:
-  https://obsproject.com/wiki/How-To-Contribute-Translations-For-OBS
+| Path | Contents |
+| --- | --- |
+| `frontend/widgets/mixish/` | Mixish layout, tiles, overlay engine, mixer, settings dialogs |
+| `frontend/forms/mixish/` | `mixish.qss` and the small chevron asset |
+| `installer/` | Inno Setup script |
+| `MIXISH_DESIGN_SYSTEM.md` | Design tokens and component rules |
+| `MIXISH_UI_AUDIT.md` | UI audit that led to the design system |
+| `MIXISH_OVERLAY_DESIGN.md` | Overlay architecture |
+| `CHANGES.md` | Change log for every Mixish change |
 
-- Contributors to OBS Studio and related repositories are expected to
-  follow our Code of Conduct, which can be read here:
-  https://github.com/obsproject/obs-studio/blob/master/COC.rst
+## Current limitations
 
-- Other ways to contribute are by helping people out with support on
-  our forums or in our community chat.  Please limit support to topics
-  you fully understand -- bad advice is worse than no advice.  When it
-  comes to something that you don't fully know or understand, please
-  defer to the official help or official channels.
+- Overlay channel assignments are not persisted across restarts yet.
+- Recording/streaming settings map to OBS **Simple Output**; advanced-output-only
+  options (file splitting, independent recording bitrate) are not exposed.
+- The installer is not code-signed, so Windows SmartScreen may show
+  "Unknown publisher".
+- Application data uses OBS's `%APPDATA%\obs-studio` folder.
 
+## License
 
-SAST Tools
-----------
+Mixish is free software licensed under the **GNU General Public License,
+version 2 or later** (GPL-2.0-or-later), the same license as OBS Studio.
+See `COPYING` and `LICENSE`.
 
-`PVS-Studio <https://pvs-studio.com/pvs-studio/?utm_source=website&utm_medium=github&utm_campaign=open_source>`_ - static analyzer for C, C++, C#, and Java code.
+Mixish is based on [OBS Studio](https://obsproject.com/). All original OBS
+copyright and license notices are retained. Mixish is an independent project
+and is not affiliated with or endorsed by the OBS Project.
+
+## Credits
+
+- OBS Studio and its contributors — the engine, UI foundations and build system
+- Qt, FFmpeg and the other open-source projects bundled with OBS
+- Everyone who tested the switcher UI and reported issues
