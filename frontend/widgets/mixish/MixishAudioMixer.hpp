@@ -22,21 +22,21 @@
 #include <QStringList>
 
 class MixishSwitcher;
+class QHBoxLayout;
 class QLabel;
 class QScrollArea;
 class QSlider;
 class QTimer;
 class QToolButton;
-class QVBoxLayout;
 class QWidget;
 
 /* Docked audio mixer for the Mixish input area.
  *
- * Each row is OBS's own VolumeControl (fader, mute, level meter, monitor
- * toggle) and the source list comes from the running scene collection. The
- * master row drives the Mixish master bus in libobs: gain is applied to the
- * final program mix (stream/recording), and the meter reads the post-gain
- * program peak. Rows are laid out vertically in a scroller. */
+ * Sources are shown as vertical channel strips (name, dB, vertical fader,
+ * stereo meter, mute/monitor) with the program master strip pinned on the
+ * right, in the style of a hardware/vMix console. The master drives the
+ * Mixish master bus in libobs: gain is applied to the final program mix
+ * (stream/recording), and its meter reads the post-gain program peak. */
 class MixishAudioMixer : public QFrame {
 	Q_OBJECT
 
@@ -59,7 +59,6 @@ private:
 	MixishSwitcher *switcher = nullptr;
 
 	QPointer<QWidget> masterHost = nullptr;
-	QPointer<QLabel> masterName = nullptr;
 	QPointer<QSlider> masterSlider = nullptr;
 	QPointer<QLabel> masterValue = nullptr;
 	QPointer<QToolButton> masterMute = nullptr;
@@ -67,7 +66,7 @@ private:
 
 	QPointer<QScrollArea> scrollArea = nullptr;
 	QPointer<QWidget> rowsHost = nullptr;
-	QPointer<QVBoxLayout> rowLayout = nullptr;
+	QPointer<QHBoxLayout> rowLayout = nullptr;
 	QPointer<QLabel> emptyLabel = nullptr;
 
 	QPointer<QTimer> refreshTimer;

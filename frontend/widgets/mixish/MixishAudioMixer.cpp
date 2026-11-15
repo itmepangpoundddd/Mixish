@@ -92,15 +92,17 @@ void KeepProgramMixAlive(void *, size_t, struct audio_data *) {}
 
 } // namespace
 
-/* Horizontal peak meter for the master bus. The audio thread updates a
- * single float, so the widget polls it and applies a fast attack / slow
- * release ballistics of its own. */
+/* Vertical peak meter for the master bus. The audio thread updates a single
+ * float, so the widget polls it and applies fast attack / slow release
+ * ballistics of its own. */
 class MixishMasterMeter : public QWidget {
 public:
 	explicit MixishMasterMeter(QWidget *parent) : QWidget(parent)
 	{
 		setObjectName(QStringLiteral("mixishMasterMeter"));
-		setFixedSize(64, 8);
+		setFixedWidth(10);
+		setMinimumHeight(60);
+		setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
 	}
 
 	void SetLevel(float peak)
@@ -141,7 +143,7 @@ protected:
 			color = QColor(0xE6, 0xB8, 0x3C);
 
 		QRectF fill = area;
-		fill.setWidth(area.width() * std::min(1.0f, fraction));
+		fill.setTop(area.bottom() - area.height() * std::min(1.0f, fraction));
 		painter.setBrush(color);
 		painter.drawRoundedRect(fill, 2.0, 2.0);
 	}
@@ -172,33 +174,36 @@ MixishAudioMixer::MixishAudioMixer(MixishSwitcher *switcher_, QWidget *parent)
 	titleRow->addStretch(1);
 	outer->addLayout(titleRow);
 
-	masterName = new QLabel(tr("MASTER"), this);
-	MixishTheme::MakeSectionLabel(masterName);
-	outer->addWidget(masterName);
-
-	masterHost = new QWidget(this);
-	masterHost->setObjectName(QStringLiteral("mixishMixerMaster"));
-	masterHost->setLayout(new QVBoxLayout(masterHost));
-	masterHost->layout()->setContentsMargins(0, 0, 0, 2);
-	masterHost->layout()->setSpacing(1);
-	outer->addWidget(masterHost);
+	auto *contentRow = new QHBoxLayout();
+	contentRow->setContentsMargins(0, 0, 0, 0);
+	contentRow->setSpacing(MixishTheme::Space2);
 
 	scrollArea = new QScrollArea(this);
 	scrollArea->setObjectName(QStringLiteral("mixishMixerScroll"));
 	scrollArea->setFrameShape(QFrame::NoFrame);
 	scrollArea->setWidgetResizable(true);
-	scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
-	scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+	scrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+	scrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 
 	rowsHost = new QWidget(scrollArea);
 	rowsHost->setObjectName(QStringLiteral("mixishMixerRows"));
-	rowLayout = new QVBoxLayout(rowsHost);
+	rowLayout = new QHBoxLayout(rowsHost);
 	rowLayout->setContentsMargins(0, 0, 0, 0);
 	rowLayout->setSpacing(MixishTheme::Space1);
-	rowLayout->setAlignment(Qt::AlignTop);
+	rowLayout->setAlignment(Qt::AlignLeft | Qt::AlignTop);
 	scrollArea->setWidget(rowsHost);
 
-	outer->addWidget(scrollArea, 1);
+	contentRow->addWidget(scrollArea, 1);
+
+	masterHost = new QWidget(this);
+	masterHost->setObjectName(QStringLiteral("mixishMixerMaster"));
+	masterHost->setFixedWidth(80);
+	masterHost->setLayout(new QVBoxLayout(masterHost));
+	masterHost->layout()->setContentsMargins(0, 0, 0, 0);
+	masterHost->layout()->setSpacing(0);
+	contentRow->addWidget(masterHost, 0);
+
+	outer->addLayout(contentRow, 1);
 
 	refreshTimer = new QTimer(this);
 	refreshTimer->setInterval(1500);
@@ -251,37 +256,52 @@ void MixishAudioMixer::BuildMaster()
 
 	auto *card = new QFrame(masterHost);
 	card->setObjectName(QStringLiteral("mixishMasterCard"));
-	auto *cardLayout = new QHBoxLayout(card);
-	cardLayout->setContentsMargins(MixishTheme::Space1, MixishTheme::Space1,
-				       MixishTheme::Space1, MixishTheme::Space1);
-	cardLayout->setSpacing(MixishTheme::Space2);
+	card->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
+	auto *cardLayout = new QVBoxLayout(card);
+	cardLayout->setContentsMargins(MixishTheme::Space1, 6, MixishTheme::Space1,
+				       MixishTheme::Space1);
+	cardLayout->setSpacing(2);
+
+	auto *name = new QLabel(tr("MASTER"), card);
+	name->setAlignment(Qt::AlignCenter);
+	name->setToolTip(tr("Master output (stream and recording)"));
+	cardLayout->addWidget(name);
+
+	masterValue = new QLabel(card);
+	masterValue->setObjectName(QStringLiteral("volLabel"));
+	masterValue->setAlignment(Qt::AlignCenter);
+	cardLayout->addWidget(masterValue);
+
+	auto *faderRow = new QHBoxLayout();
+	faderRow->setContentsMargins(0, 0, 0, 0);
+	faderRow->setSpacing(2);
+	faderRow->setAlignment(Qt::AlignHCenter);
+
+	masterSlider = new QSlider(Qt::Vertical, card);
+	masterSlider->setObjectName(QStringLiteral("mixishMasterSlider"));
+	masterSlider->setRange(int(MasterMinDb * DbSteps), int(MasterMaxDb * DbSteps));
+	masterSlider->setSingleStep(1);
+	masterSlider->setPageStep(DbSteps);
+	masterSlider->setValue(int(std::lround(db * DbSteps)));
+	masterSlider->setFixedWidth(28);
+	masterSlider->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+	masterSlider->setToolTip(tr("Master gain applied to the final program mix"));
+	faderRow->addWidget(masterSlider, 0);
+
+	masterMeter = new MixishMasterMeter(card);
+	faderRow->addWidget(masterMeter, 0);
+
+	cardLayout->addLayout(faderRow, 1);
 
 	masterMute = new QToolButton(card);
 	masterMute->setObjectName(QStringLiteral("mixishMasterMute"));
 	masterMute->setText(QStringLiteral("M"));
 	masterMute->setCheckable(true);
 	masterMute->setChecked(muted);
-	masterMute->setFixedSize(24, 24);
+	masterMute->setFixedHeight(22);
+	masterMute->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 	masterMute->setToolTip(tr("Mute the master output (stream and recording)"));
 	cardLayout->addWidget(masterMute);
-
-	masterSlider = new QSlider(Qt::Horizontal, card);
-	masterSlider->setObjectName(QStringLiteral("mixishMasterSlider"));
-	masterSlider->setRange(int(MasterMinDb * DbSteps), int(MasterMaxDb * DbSteps));
-	masterSlider->setSingleStep(1);
-	masterSlider->setPageStep(DbSteps);
-	masterSlider->setValue(int(std::lround(db * DbSteps)));
-	masterSlider->setToolTip(tr("Master gain applied to the final program mix"));
-	cardLayout->addWidget(masterSlider, 1);
-
-	masterValue = new QLabel(card);
-	masterValue->setObjectName(QStringLiteral("volLabel"));
-	masterValue->setMinimumWidth(58);
-	masterValue->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-	cardLayout->addWidget(masterValue);
-
-	masterMeter = new MixishMasterMeter(card);
-	cardLayout->addWidget(masterMeter);
 
 	masterHost->layout()->addWidget(card);
 
@@ -371,14 +391,19 @@ void MixishAudioMixer::RebuildRows()
 	for (obs_source_t *source : sources) {
 		auto *card = new QFrame(rowsHost);
 		card->setObjectName(QStringLiteral("mixishMixerCard"));
-		auto *cardLayout = new QHBoxLayout(card);
+		card->setFixedWidth(80);
+		card->setMinimumHeight(140);
+		card->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+
+		auto *cardLayout = new QVBoxLayout(card);
 		cardLayout->setContentsMargins(MixishTheme::Space1, MixishTheme::Space1,
 					       MixishTheme::Space1, MixishTheme::Space1);
 		cardLayout->setSpacing(0);
 
-		auto *control = new VolumeControl(source, card, false);
+		auto *control = new VolumeControl(source, card, true);
 		control->setObjectName(QStringLiteral("mixishMixerRow"));
-		control->setMinimumHeight(40);
+		control->setMinimumHeight(140);
+		control->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Expanding);
 		control->setToolTip(QString::fromUtf8(obs_source_get_name(source)));
 		HideCategoryLabels(control);
 		cardLayout->addWidget(control);

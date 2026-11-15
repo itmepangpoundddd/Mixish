@@ -190,15 +190,19 @@ Resizable via a vertical splitter between the tile row and the mixer.
 Minimum width 280 px, default 300 px, maximum 480 px; minimum height follows
 the INPUTS row. `--bg-panel`, 1 px left border, 12 px padding.
 - Header: "AUDIO MIXER" section label.
-- "MASTER" section label + one 44 px accent-bordered card, always visible: a
-  24 px mute button (red when engaged), a −60..+6 dB fader (0.1 dB steps), a
-  right-aligned dB readout and a 64×8 post-gain peak meter (green → yellow →
-  red, 50 ms polling). The meter and fader read/write the libobs master bus, so
-  they affect the encoded program mix.
-- One 44 px row per audio input, 12 px text, 4 px row gap. All audio inputs are
-  listed, including Desktop Audio.
-- Vertical scrolling; **a row is never clipped** — the layout reserves the full
-  44 px and scrolls instead of compressing.
+- A horizontal console of vertical channel strips (vMix-style): each source is
+  an 80 px card containing OBS's `VolumeControl` in vertical mode — name menu,
+  dB readout, vertical fader, stereo meter, mute and monitor buttons.
+- The MASTER strip is pinned on the right and always visible: an 80 px
+  accent-bordered card with a `MASTER` label, dB readout, vertical −60..+6 dB
+  fader (0.1 dB steps), a 10 px post-gain peak meter (green → yellow → red,
+  50 ms polling) and a full-width `M` button (red when muted). The fader and
+  meter read/write the libobs master bus, so they affect the encoded program
+  mix and not just monitoring.
+- All audio inputs are listed, including Desktop Audio. New sources appear
+  without restarting.
+- Strips keep a 140 px minimum height and scroll horizontally when they exceed
+  the panel width; they are never compressed or clipped.
 - Empty state: 12 px muted text.
 
 ### Bottom bar
@@ -293,8 +297,8 @@ become neutral numbered labels (no per-channel colour).
 - setStyleSheet() remains only in MixishTheme.cpp (the loader) and as style clearing when leaving the Mixish layout.
 - Dropdown buttons use an 8 px chevron with an 18 px menu-button area; the bottom-bar gear buttons are 32x32 to match Record/Stream.
 - Tile thumbnails request all visible tiles every 250 ms, so previews update several times per second.
-- Mixer rows are cards; the master card uses the accent border. OBS's "Active/Global" category label is hidden.
-- The master card is a real bus, not an output-device fader: post-mix gain, mute and peak are provided by `obs_set_master_volume_db()` / `obs_get_master_peak()` in libobs and persisted as `Mixish/MasterVolumeDb` / `MasterMuted`.
+- Mixer channels are vertical cards; the MASTER strip is pinned on the right and uses the accent border. OBS's "Active/Global" category label is hidden.
+- The master strip is a real bus, not an output-device fader: post-mix gain, mute and peak are provided by `obs_set_master_volume_db()` / `obs_get_master_peak()` in libobs and persisted as `Mixish/MasterVolumeDb` / `MasterMuted`.
 
 ## Settings dialogs and properties page (vMix-aligned layout)
 

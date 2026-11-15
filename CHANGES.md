@@ -221,6 +221,12 @@ Kept intentionally (credits / external references / internals):
 - `frontend/forms/mixish/mixish.qss` - master mute button states (neutral, hover, red when muted).
 - Tested: libobs + frontend build clean; master meter tracks the program; mute sets the bus to −96 dB; a 5 s recording captured at 0 dB measured −14.2 dB mean / −0.4 dB peak, the same recording with master muted measured −91 dB (digital silence). Restart restored −1.0 dB and the mute state from the config.
 
+## Vertical mixer console (vMix-style)
+
+- `frontend/widgets/mixish/MixishAudioMixer.hpp` / `.cpp` - the mixer is now a horizontal console of vertical channel strips instead of stacked horizontal rows. Each source is an 80 px card holding OBS's own `VolumeControl` in vertical mode (name menu, dB, vertical fader, stereo meter, mute and monitor); the master strip is pinned on the right and uses a vertical fader, vertical post-gain meter and full-width `M` button. Source strips scroll horizontally when they exceed the panel width. Master gain, mute, persistence and the keepalive sink are unchanged.
+- `frontend/forms/mixish/mixish.qss` - vertical fader groove/handle rules for source and master cards (the horizontal rules remain for any future horizontal use); the master mute button keeps its red checked state.
+- `MIXISH_DESIGN_SYSTEM.md` - updated the audio mixer component spec for the vertical strip layout.
+
 ## Later tasks (not started)
 
 - Title input (templated text/lower-third, quick text edit) - effort medium; risk medium.

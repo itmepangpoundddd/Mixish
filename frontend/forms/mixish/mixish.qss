@@ -452,6 +452,29 @@ QFrame#mixishMasterCard QSlider::handle:horizontal {
 	margin: -4px 0px;
 	border-radius: 5px;
 }
+
+QFrame#mixishMixerCard QSlider::groove:vertical,
+QFrame#mixishMasterCard QSlider::groove:vertical {
+	width: 4px;
+	background-color: #2A2A2A;
+	border: 0px;
+	border-radius: 2px;
+}
+
+QFrame#mixishMixerCard QSlider::handle:vertical,
+QFrame#mixishMasterCard QSlider::handle:vertical {
+	background-color: #F1F1F1;
+	height: 10px;
+	margin: 0px -4px;
+	border-radius: 5px;
+}
+
+QFrame#mixishMixerCard QSlider::sub-page:vertical,
+QFrame#mixishMasterCard QSlider::sub-page:vertical,
+QFrame#mixishMixerCard QSlider::add-page:vertical,
+QFrame#mixishMasterCard QSlider::add-page:vertical {
+	background: transparent;
+}
 QFrame#mixishMixerCard QPushButton,
 QFrame#mixishMasterCard QPushButton {
 	background: transparent;
@@ -465,6 +488,7 @@ QToolButton#mixishMasterMute {
 	color: #B8B8B8;
 	font-size: 10px;
 	font-weight: 700;
+	padding: 0px;
 }
 
 QToolButton#mixishMasterMute:hover {
