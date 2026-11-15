@@ -238,6 +238,15 @@ Kept intentionally (credits / external references / internals):
 - `README.md`, `MIXISH_DESIGN_SYSTEM.md` - feature and component specs.
 - Tested at 1366×768: manual drag 60% → completed, 40% → cancelled; dragging fully to PGM completed while the button was still held and the grip returned; End completed, arrow keys and wheel nudged, Esc cancelled; Fade, Swipe and Luma Wipe (2 s) followed the real progress; dragging during a Fade was ignored; no duplicate program switch after completion. Build and shutdown clean.
 
+## Timer input (clock, countdown, stopwatch)
+
+- `plugins/mixish-timer/mixish-timer.cpp` - new native OBS source registered as `mixish_timer`. GDI+ renders the text into a dynamic OBS texture; the source updates once per second. Modes: realtime clock (12/24-hour, optional seconds/date), countdown (H/M/S, stops at 00:00:00) and stopwatch (counts up). Start/Pause/Reset act on the live source; "Start automatically when loaded" starts countdown/stopwatch when the source is created. Style: font, text color/opacity, outline color/opacity/size, background color/opacity and canvas size. Defaults: Segoe UI 72 px, white text, 2 px black outline at 80%, transparent background, 800x160 canvas.
+- `plugins/mixish-timer/CMakeLists.txt`, `plugins/CMakeLists.txt` - build the plugin as a Windows core module.
+- `plugins/mixish-timer/data/timer.svg` - stopwatch icon used by the Add Input list.
+- `frontend/widgets/mixish/MixishAddInputController.cpp` - Timer description in the Add Input type panel.
+- `README.md` - Timer feature.
+- Tested at 1366x768: Timer appears in Add Input with its icon and description; a created Timer renders the live clock in Preview and the tile thumbnail and updates every second; a 5 s countdown with auto-start reached 00:00:00; a stopwatch with auto-start counted from 00:00:06 to 00:00:09 across three seconds; source settings and the Timer scene persisted in the scene collection.
+
 ## Later tasks (not started)
 
 - Title input (templated text/lower-third, quick text edit) - effort medium; risk medium.

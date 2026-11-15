@@ -510,6 +510,8 @@ QString MixishAddInputController::TypeDescription(const QString &type) const
 		return tr("Cycle through a folder of images.");
 	if (type == QStringLiteral("text_gdiplus") || type == QStringLiteral("text_ft2_source"))
 		return tr("Render text, titles, or lower-thirds with fonts and effects.");
+	if (type == QStringLiteral("mixish_timer"))
+		return tr("Show a realtime clock, countdown, or stopwatch. Configure the mode, font, colors, outline and canvas size in Properties.");
 	if (type == QStringLiteral("ffmpeg_source"))
 		return tr("Play a video or audio file. Recent files and Browse are available on the right.");
 	if (type == QStringLiteral("vlc_source"))

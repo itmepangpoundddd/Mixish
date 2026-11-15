@@ -28,6 +28,11 @@ while keeping the OBS engine (scenes, sources, transitions, encoding) underneath
   on the right. The master gain is applied after the program mix in libobs (so
   it affects recording/streaming), has a stereo post-gain VU meter with a dB
   scale, and its level and mute state persist across restarts.
+- **Timer input** with realtime clock, countdown and stopwatch modes. The clock
+  supports 12/24-hour time, seconds and date; countdown/stopwatch have
+  Start/Pause/Reset and optional auto-start. Font, text/outline/background
+  colors and canvas size are configurable, with a transparent background by
+  default.
 - **Media transport** for the selected input (seek, play/pause, restart, previous/next).
 - **Input Properties** dialog with a dark OBS property form and a large live preview.
 - **Recording / Streaming settings** dialogs modeled after a hardware switcher.
