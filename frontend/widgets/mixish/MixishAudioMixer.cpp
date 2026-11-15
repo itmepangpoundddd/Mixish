@@ -24,6 +24,7 @@
 #include <OBSApp.hpp>
 #include <util/config-file.h>
 
+#include <QDateTime>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QPainter>
@@ -92,65 +93,167 @@ void KeepProgramMixAlive(void *, size_t, struct audio_data *) {}
 
 } // namespace
 
-/* Vertical peak meter for the master bus. The audio thread updates a single
- * float, so the widget polls it and applies fast attack / slow release
- * ballistics of its own. */
+/* Post-gain master meter drawn to match OBS's source meters: stereo bars,
+ * green/yellow/red zones, 6 dB scale and peak-hold markers. The audio thread
+ * publishes per-channel peaks; this widget polls them at 50 ms and applies
+ * fast attack / slow release ballistics. */
 class MixishMasterMeter : public QWidget {
 public:
 	explicit MixishMasterMeter(QWidget *parent) : QWidget(parent)
 	{
 		setObjectName(QStringLiteral("mixishMasterMeter"));
-		setFixedWidth(10);
-		setMinimumHeight(60);
+		setFixedWidth(50);
+		setMinimumHeight(80);
 		setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+
+		for (int i = 0; i < Channels; i++) {
+			displayDb[i] = MasterMinDb;
+			holdDb[i] = MasterMinDb;
+			holdUntil[i] = 0;
+		}
 	}
 
-	void SetLevel(float peak)
+	void SetLevels(float left, float right)
 	{
-		float db = MasterMinDb;
-		if (peak > 0.000001f) {
-			db = 20.0f * std::log10(peak);
-			db = std::max(MasterMinDb, std::min(0.0f, db));
+		const float peaks[Channels] = {left, right};
+		const qint64 now = QDateTime::currentMSecsSinceEpoch();
+		bool changed = false;
+
+		for (int i = 0; i < Channels; i++) {
+			const float db = ToDb(peaks[i]);
+
+			const float next = db > displayDb[i] ? db : std::max(db, displayDb[i] - 3.0f);
+			if (std::fabs(next - displayDb[i]) >= 0.05f)
+				changed = true;
+			displayDb[i] = next;
+
+			if (db >= holdDb[i]) {
+				holdDb[i] = db;
+				holdUntil[i] = now + 1500;
+				changed = true;
+			} else if (now >= holdUntil[i]) {
+				const float hold = std::max(db, holdDb[i] - 3.0f);
+				if (std::fabs(hold - holdDb[i]) >= 0.05f)
+					changed = true;
+				holdDb[i] = hold;
+			}
+
+			if (peaks[i] >= 1.0f) {
+				clipped[i] = true;
+				clipUntil[i] = now + 1000;
+				changed = true;
+			} else if (clipped[i] && now >= clipUntil[i]) {
+				clipped[i] = false;
+				changed = true;
+			}
 		}
 
-		displayDb = db > displayDb ? db : std::max(db, displayDb - 3.0f);
-		if (std::fabs(displayDb - lastPainted) < 0.05f)
-			return;
-
-		lastPainted = displayDb;
-		update();
+		if (changed)
+			update();
 	}
 
 protected:
 	void paintEvent(QPaintEvent *) override
 	{
 		QPainter painter(this);
-		painter.setRenderHint(QPainter::Antialiasing, true);
-		painter.setPen(Qt::NoPen);
 
-		const QRectF area = QRectF(rect()).adjusted(0.0, 0.0, -1.0, -1.0);
-		painter.setBrush(QColor(0x2A, 0x2A, 0x2A));
-		painter.drawRoundedRect(area, 2.0, 2.0);
+		const int height = this->height();
+		const int barWidth = 4;
+		const int barGap = 2;
+		const int barsWidth = Channels * barWidth + (Channels - 1) * barGap;
+		const int tickX = barsWidth + 2;
+		const int labelX = barsWidth + 5;
 
-		const float fraction = (displayDb - MasterMinDb) / -MasterMinDb;
-		if (fraction <= 0.0f)
-			return;
+		QFont font = this->font();
+		font.setPixelSize(8);
+		painter.setFont(font);
 
-		QColor color(0x37, 0xC8, 0x6B);
-		if (displayDb > -1.0f)
-			color = QColor(0xE7, 0x4C, 0x3C);
-		else if (displayDb > -8.0f)
-			color = QColor(0xE6, 0xB8, 0x3C);
+		const int meterTop = 4;
+		const int meterHeight = height - 12;
 
-		QRectF fill = area;
-		fill.setTop(area.bottom() - area.height() * std::min(1.0f, fraction));
-		painter.setBrush(color);
-		painter.drawRoundedRect(fill, 2.0, 2.0);
+		auto yForDb = [meterTop, meterHeight](float db) {
+			db = std::max(MasterMinDb, std::min(0.0f, db));
+			return meterTop + int(std::lround(-db * meterHeight / -MasterMinDb));
+		};
+
+		auto barRect = [&](int x, float fromDb, float toDb) {
+			const int top = yForDb(toDb);
+			const int bottom = yForDb(fromDb);
+			return QRect(x, top, barWidth, std::max(1, bottom - top));
+		};
+
+		const QColor bgGreen(0x14, 0x52, 0x26);
+		const QColor bgYellow(0x6E, 0x52, 0x0D);
+		const QColor bgRed(0x7D, 0x12, 0x24);
+		const QColor fgGreen(0x37, 0xD2, 0x47);
+		const QColor fgYellow(0xE8, 0xC1, 0x3A);
+		const QColor fgRed(0xE3, 0x3B, 0x57);
+		const QColor tickColor(0x3A, 0x3A, 0x3A);
+		const QColor labelColor(0xB8, 0xB8, 0xB8);
+
+		for (int ch = 0; ch < Channels; ch++) {
+			const int x = ch * (barWidth + barGap);
+
+			painter.fillRect(barRect(x, MasterMinDb, WarningDb), bgGreen);
+			painter.fillRect(barRect(x, WarningDb, ErrorDb), bgYellow);
+			painter.fillRect(barRect(x, ErrorDb, 0.0f), bgRed);
+
+			const float level = displayDb[ch];
+			if (level > MasterMinDb) {
+				const float greenTop = std::min(level, WarningDb);
+				if (greenTop > MasterMinDb)
+					painter.fillRect(barRect(x, MasterMinDb, greenTop), fgGreen);
+
+				if (level > WarningDb) {
+					const float yellowTop = std::min(level, ErrorDb);
+					painter.fillRect(barRect(x, WarningDb, yellowTop), fgYellow);
+				}
+
+				if (level > ErrorDb)
+					painter.fillRect(barRect(x, ErrorDb, level), fgRed);
+			}
+
+			if (clipped[ch])
+				painter.fillRect(x, 0, barWidth, 2, QColor(0xFF, 0xFF, 0xFF));
+
+			if (holdDb[ch] > MasterMinDb + 0.5f) {
+				const int y = yForDb(holdDb[ch]);
+				painter.fillRect(x, y, barWidth, 1, QColor(0xF1, 0xF1, 0xF1));
+			}
+		}
+
+		for (int db = 0; db >= int(MasterMinDb); db -= 6) {
+			const int y = yForDb(float(db));
+
+			painter.setPen(tickColor);
+			painter.drawLine(tickX, y, tickX + 2, y);
+
+			const int labelTop = std::max(0, std::min(height - 10, y - 5));
+			painter.setPen(labelColor);
+			painter.drawText(QRect(labelX, labelTop, width() - labelX, 10),
+					 Qt::AlignLeft | Qt::AlignVCenter, QString::number(db));
+		}
 	}
 
 private:
-	float displayDb = MasterMinDb;
-	float lastPainted = MasterMinDb - 1.0f;
+	static constexpr int Channels = 2;
+	static constexpr float WarningDb = -20.0f;
+	static constexpr float ErrorDb = -9.0f;
+
+	static float ToDb(float peak)
+	{
+		if (peak <= 0.000001f)
+			return MasterMinDb;
+
+		const float db = 20.0f * std::log10(peak);
+		return std::max(MasterMinDb, std::min(0.0f, db));
+	}
+
+	float displayDb[Channels];
+	float holdDb[Channels];
+	qint64 holdUntil[Channels];
+	qint64 clipUntil[Channels] = {0, 0};
+	bool clipped[Channels] = {false, false};
 };
 
 MixishAudioMixer::MixishAudioMixer(MixishSwitcher *switcher_, QWidget *parent)
@@ -197,7 +300,7 @@ MixishAudioMixer::MixishAudioMixer(MixishSwitcher *switcher_, QWidget *parent)
 
 	masterHost = new QWidget(this);
 	masterHost->setObjectName(QStringLiteral("mixishMixerMaster"));
-	masterHost->setFixedWidth(80);
+	masterHost->setFixedWidth(88);
 	masterHost->setLayout(new QVBoxLayout(masterHost));
 	masterHost->layout()->setContentsMargins(0, 0, 0, 0);
 	masterHost->layout()->setSpacing(0);
@@ -322,7 +425,8 @@ void MixishAudioMixer::BuildMaster()
 	connect(meterTimer, &QTimer::timeout, this, [this]() {
 		auto *meter = static_cast<MixishMasterMeter *>(masterMeter.data());
 		if (meter)
-			meter->SetLevel(obs_get_master_peak());
+			meter->SetLevels(obs_get_master_peak_channel(0),
+					 obs_get_master_peak_channel(1));
 	});
 	meterTimer->start();
 
@@ -342,7 +446,7 @@ void MixishAudioMixer::UpdateMasterGain()
 		masterValue->setText(FormatDb(lastMasterDb));
 
 	if (auto *meter = static_cast<MixishMasterMeter *>(masterMeter.data()))
-		meter->SetLevel(0.0f);
+		meter->SetLevels(0.0f, 0.0f);
 }
 
 void MixishAudioMixer::SaveMasterConfig()

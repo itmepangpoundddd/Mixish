@@ -193,12 +193,14 @@ the INPUTS row. `--bg-panel`, 1 px left border, 12 px padding.
 - A horizontal console of vertical channel strips (vMix-style): each source is
   an 80 px card containing OBS's `VolumeControl` in vertical mode — name menu,
   dB readout, vertical fader, stereo meter, mute and monitor buttons.
-- The MASTER strip is pinned on the right and always visible: an 80 px
+- The MASTER strip is pinned on the right and always visible: an 88 px
   accent-bordered card with a `MASTER` label, dB readout, vertical −60..+6 dB
-  fader (0.1 dB steps), a 10 px post-gain peak meter (green → yellow → red,
-  50 ms polling) and a full-width `M` button (red when muted). The fader and
-  meter read/write the libobs master bus, so they affect the encoded program
-  mix and not just monitoring.
+  fader (0.1 dB steps), a 50 px stereo post-gain VU meter and a full-width `M`
+  button (red when muted). The VU mirrors OBS source meters: two channel bars,
+  green/yellow/red zones, a 6 dB scale from 0 to −60, peak-hold markers, a
+  one-second clip cap and 50 ms polling. The fader and meter read/write the
+  libobs master bus, so they affect the encoded program mix and not just
+  monitoring.
 - All audio inputs are listed, including Desktop Audio. New sources appear
   without restarting.
 - Strips keep a 140 px minimum height and scroll horizontally when they exceed

@@ -129,6 +129,7 @@ static void apply_master_gain(struct obs_core_audio *audio, struct audio_output_
 {
 	const float db = (float)audio->master_volume_db100 / 100.0f;
 	const float gain = db <= -96.0f ? 0.0f : powf(10.0f, db / 20.0f);
+	float peaks[MAX_AUDIO_CHANNELS] = {0};
 	float peak = 0.0f;
 
 	for (size_t mix_idx = 0; mix_idx < MAX_AUDIO_MIXES; mix_idx++) {
@@ -143,14 +144,24 @@ static void apply_master_gain(struct obs_core_audio *audio, struct audio_output_
 			}
 
 			if (mix_idx == 0) {
+				float channel_peak = 0.0f;
+
 				for (size_t i = 0; i < AUDIO_OUTPUT_FRAMES; i++) {
 					const float level = fabsf(data[i]);
-					if (level > peak)
-						peak = level;
+					if (level > channel_peak)
+						channel_peak = level;
 				}
+
+				if (ch < MAX_AUDIO_CHANNELS && channel_peak > peaks[ch])
+					peaks[ch] = channel_peak;
+				if (channel_peak > peak)
+					peak = channel_peak;
 			}
 		}
 	}
+
+	for (size_t ch = 0; ch < MAX_AUDIO_CHANNELS; ch++)
+		audio->master_peaks[ch] = ch < channels ? peaks[ch] : 0.0f;
 
 	audio->master_peak = peak;
 }
@@ -724,6 +735,8 @@ bool audio_callback(void *param, uint64_t start_ts_in, uint64_t end_ts_in, uint6
 		apply_master_gain(audio, mixes, channels);
 	} else {
 		audio->master_peak = 0.0f;
+		for (size_t ch = 0; ch < MAX_AUDIO_CHANNELS; ch++)
+			audio->master_peaks[ch] = 0.0f;
 	}
 
 	/* ------------------------------------------------ */

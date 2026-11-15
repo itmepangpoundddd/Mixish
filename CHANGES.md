@@ -224,6 +224,8 @@ Kept intentionally (credits / external references / internals):
 ## Vertical mixer console (vMix-style)
 
 - `frontend/widgets/mixish/MixishAudioMixer.hpp` / `.cpp` - the mixer is now a horizontal console of vertical channel strips instead of stacked horizontal rows. Each source is an 80 px card holding OBS's own `VolumeControl` in vertical mode (name menu, dB, vertical fader, stereo meter, mute and monitor); the master strip is pinned on the right and uses a vertical fader, vertical post-gain meter and full-width `M` button. Source strips scroll horizontally when they exceed the panel width. Master gain, mute, persistence and the keepalive sink are unchanged.
+- `frontend/widgets/mixish/MixishAudioMixer.cpp` - the master VU now mirrors the source meters: two channel bars, green/yellow/red zones, a 6 dB scale (0 to −60), peak-hold markers, a one-second clip cap and 50 ms polling. It reads per-channel peaks instead of a single mono value, so left/right levels are independent.
+- `libobs/obs.h` / `obs.c` - new `obs_get_master_peak_channel()` accessor; `apply_master_gain()` in `obs-audio.c` publishes a peak per program channel alongside the existing overall peak.
 - `frontend/forms/mixish/mixish.qss` - vertical fader groove/handle rules for source and master cards (the horizontal rules remain for any future horizontal use); the master mute button keeps its red checked state.
 - `MIXISH_DESIGN_SYSTEM.md` - updated the audio mixer component spec for the vertical strip layout.
 

@@ -743,6 +743,8 @@ EXPORT void obs_set_master_volume_db(float db);
 EXPORT float obs_get_master_volume_db(void);
 /* Linear peak of the last mixed block (post master gain), for meters. */
 EXPORT float obs_get_master_peak(void);
+/* Per-channel linear peak of the last program block (post master gain). */
+EXPORT float obs_get_master_peak_channel(uint32_t channel);
 
 /** Gets the main video output handler for this OBS context */
 EXPORT video_t *obs_get_video(void);

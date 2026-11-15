@@ -470,6 +470,7 @@ struct obs_core_audio {
 	 * have been summed. Stored as dB * 100 for atomic access. */
 	volatile long master_volume_db100;
 	volatile float master_peak;
+	volatile float master_peaks[MAX_AUDIO_CHANNELS];
 };
 
 /* user sources, output channels, and displays */

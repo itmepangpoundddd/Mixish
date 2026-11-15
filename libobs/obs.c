@@ -1865,6 +1865,14 @@ float obs_get_master_peak(void)
 	return obs->audio.master_peak;
 }
 
+float obs_get_master_peak_channel(uint32_t channel)
+{
+	if (!obs || channel >= MAX_AUDIO_CHANNELS)
+		return 0.0f;
+
+	return obs->audio.master_peaks[channel];
+}
+
 video_t *obs_get_video(void)
 {
 	return obs->data.main_canvas->mix->video;
