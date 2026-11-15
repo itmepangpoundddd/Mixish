@@ -229,6 +229,15 @@ Kept intentionally (credits / external references / internals):
 - `frontend/forms/mixish/mixish.qss` - vertical fader groove/handle rules for source and master cards (the horizontal rules remain for any future horizontal use); the master mute button keeps its red checked state.
 - `MIXISH_DESIGN_SYSTEM.md` - updated the audio mixer component spec for the vertical strip layout.
 
+## Custom T-bar (manual transition)
+
+- `frontend/widgets/mixish/MixishTBar.hpp` / `.cpp` - new custom-painted T-bar: 12 px rounded track, Preview→Program gradient fill, 11 tick marks, `T-BAR`/`PVW`/`PGM` labels, a 26×36 grip with a center line, drag percentage, hover/pressed/locked/disabled states, wheel/arrow/PageUp/PageDown nudging, Esc cancel, end snapping and animated snap/return. Mouse tracking keeps the cursor and hover state in sync with the grip.
+- `frontend/widgets/mixish/MixishTransitionPanel.hpp` / `.cpp` - replaced the default QSlider and pinned the T-bar above the overlay keys so it stays visible at 1366×768. Dragging drives `SetTBarPosition`; release snaps to the nearest end and completes/cancels through `ReleaseTBar`; Cut plays a short visual pulse; Fade, custom transitions and FTB are followed by polling `obs_transition_get_time()` at 33 ms with manual input locked. A short follow-suppression window stops the outgoing tail of a manual transition from animating the grip again. Esc cancels, and the transition list opens at the top.
+- `frontend/cmake/ui-widgets.cmake` - registers the new T-bar sources.
+- `cmake/common/versionconfig.cmake` - accept a leading `v` in `git describe` output so the `v0.0.1` release tag no longer breaks CMake regeneration.
+- `README.md`, `MIXISH_DESIGN_SYSTEM.md` - feature and component specs.
+- Tested at 1366×768: manual drag 60% → completed, 40% → cancelled; dragging fully to PGM completed while the button was still held and the grip returned; End completed, arrow keys and wheel nudged, Esc cancelled; Fade, Swipe and Luma Wipe (2 s) followed the real progress; dragging during a Fade was ignored; no duplicate program switch after completion. Build and shutdown clean.
+
 ## Later tasks (not started)
 
 - Title input (templated text/lower-third, quick text edit) - effort medium; risk medium.

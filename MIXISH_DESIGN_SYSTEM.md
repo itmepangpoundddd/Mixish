@@ -152,11 +152,29 @@ Width 232 px, padding 8 px, 4 px gaps, `--bg-panel`.
   The current transition uses the generic `toggled` accent state.
 - Duration presets: row of four 24 px compact buttons; active preset = accent.
 - Duration spin box: 28 px.
-- "T-BAR" section label + 28 px T-bar.
+- The custom T-bar is pinned below the scrolling list and above the overlay
+  keys, so it is always reachable at 1366×768.
 - "OVERLAYS" section label row with `Edit` as a 24 px **secondary** button.
 - Four overlay toggles: 40×32. Empty = ghost, assigned = secondary, ON = `--program`.
 - `All Off`: 24 px secondary, full width.
-- The whole content scrolls; All Off stays pinned at the bottom.
+- The transitions/duration content scrolls; the T-bar and All Off stay pinned at
+  the bottom.
+
+### T-bar
+64 px tall, full column width, pinned above the overlay keys.
+- 12 px rounded track (`--bg-surface`/`#2A2A2A`) with 11 light tick marks.
+  The filled portion reveals a `--preview` → `--program` gradient.
+- `T-BAR` label top-left; percentage readout top-right while dragging;
+  `PVW` (`--preview`) and `PGM` (`--program`) labels under the track ends.
+- Handle: 26×36 px rounded rectangle, radius 6, one 2 px center grip line.
+  Normal `--text-primary`; hover white with an accent border; pressed/dragging
+  accent border and grip; locked gray while a button transition runs; disabled
+  at 55% opacity.
+- Only the grip (with a wider hit area) starts a drag; clicking the track never
+  jumps the transition. Wheel 25 units, arrows 10, PageUp/PageDown 100.
+- Release snaps to the nearest end; reaching either end completes or cancels
+  and returns the grip to PVW. Esc cancels. Button transitions drive the grip
+  from the real `obs_transition_get_time()` progress and lock manual input.
 
 ### INPUTS header row
 40 px, `--bg-panel`, padding 0 12 px, 12 px gaps.
@@ -250,7 +268,7 @@ become neutral numbered labels (no per-channel colour).
   signal level, not application state.
 - OBS's `MediaControls` buttons keep their icon set; only size, spacing, hover
   and disabled colours are themed.
-- The mixer/T-bar sliders keep OBS's handle shape; colors follow the tokens.
+- The mixer sliders keep OBS's handle shape; colors follow the tokens. The T-bar is fully custom-painted with the grip described in the transition column spec.
 
 ## 9. Implementation plan (after approval)
 

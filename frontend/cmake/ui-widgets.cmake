@@ -83,6 +83,8 @@ target_sources(
     widgets/mixish/MixishStreamingSettings.hpp
     widgets/mixish/MixishSwitcher.cpp
     widgets/mixish/MixishSwitcher.hpp
+    widgets/mixish/MixishTBar.cpp
+    widgets/mixish/MixishTBar.hpp
     widgets/mixish/MixishTheme.cpp
     widgets/mixish/MixishTheme.hpp
     widgets/mixish/MixishTopBar.cpp

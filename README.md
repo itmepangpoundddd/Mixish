@@ -14,8 +14,11 @@ while keeping the OBS engine (scenes, sources, transitions, encoding) underneath
 - **Preview / Program layout** with colored monitor headers and keyboard/mouse switching.
 - **Input tiles** with live thumbnails, color tags, Cut, per-tile overlay assignment
   buttons `1 2 3 4`, audio mute and an overflow menu.
-- **Transition column** with Cut, Fade, Fade to Color, Stinger, FTB, duration presets,
-  T-bar and a scrollable list of OBS transitions.
+- **Transition column** with Cut, Fade, Fade to Color, Stinger, FTB, duration
+  presets and a scrollable list of OBS transitions. The custom T-bar shows a
+  Preview-green → Program-red fill, PVW/PGM labels, a drag percentage and a
+  large grip; it follows button transitions, snaps at the ends, nudges with the
+  wheel or arrow keys, and cancels with Esc.
 - **Four overlay channels (OV1-OV4)** rendered above Program, independent of
   Cut / Fade / T-bar. Per-channel assignment, on/off, audio and fade editor.
   Assignments, audio, fade and geometry persist per scene collection; channels

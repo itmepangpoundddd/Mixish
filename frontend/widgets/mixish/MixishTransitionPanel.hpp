@@ -24,13 +24,15 @@
 
 class OBSBasic;
 class MixishSwitcher;
+class MixishTBar;
 class QLabel;
 class QPushButton;
 class QScrollArea;
-class QSlider;
+class QShowEvent;
 class QSpinBox;
 class QTimer;
 class QVBoxLayout;
+
 
 class MixishTransitionPanel : public QFrame {
 	Q_OBJECT
@@ -39,6 +41,9 @@ public:
 	MixishTransitionPanel(MixishSwitcher *switcher, OBSBasic *main, QWidget *parent = nullptr);
 
 	void RefreshTransitions();
+
+protected:
+	void showEvent(QShowEvent *event) override;
 
 private slots:
 	void OnCutClicked();
@@ -49,7 +54,11 @@ private slots:
 	void OnDurationChanged(int ms);
 	void OnDurationChangedExternally(int ms);
 	void OnTBarChanged(int value);
-	void OnTBarReleased();
+	void OnTBarDragFinished(int value);
+	void OnTBarReachedEnd(bool programSide);
+	void OnTBarCancel();
+	void OnTBarAnimationFinished();
+	void UpdateTransitionProgress();
 	void OnCurrentTransitionChanged(const QString &uuid);
 	void OnTransitionsChanged();
 	void Tick();
@@ -62,19 +71,30 @@ private:
 	void UpdateBusyState();
 	void UpdateDurationPresets();
 	void UpdateFtbState();
+	void BeginTransitionFollow();
+	void EndTransitionFollow();
+	void CompleteTBar(bool toProgram);
+	void FinishTBarCommit();
 
 	MixishSwitcher *switcher = nullptr;
 	OBSBasic *main = nullptr;
 
 	QPointer<QVBoxLayout> customLayout;
 	QPointer<QScrollArea> customScroll;
+	QPointer<QScrollArea> transitionScroll;
 	QPointer<QPushButton> cutButton;
 	QPointer<QPushButton> fadeButton;
 	QPointer<QPushButton> ftbButton;
-	QPointer<QSlider> tBar;
+	QPointer<MixishTBar> tBar;
 	QPointer<QSpinBox> durationSpin;
 	QPointer<QTimer> tickTimer;
+	QPointer<QTimer> progressTimer;
 	QHash<QString, QPointer<QPushButton>> transitionButtons;
 	QVector<QPointer<QPushButton>> durationButtons;
-	bool syncingTBar = false;
+	bool followingTransition = false;
+	bool sawTransitionProgress = false;
+	int followTicks = 0;
+	bool committingTBar = false;
+	bool commitToProgram = false;
+	qint64 followSuppressedUntil = 0;
 };

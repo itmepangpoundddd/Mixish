@@ -21,6 +21,9 @@ if(NOT DEFINED OBS_VERSION_OVERRIDE AND EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/.git
   endif()
 
   if(_obs_version_result EQUAL 0)
+    # Mixish release tags use a leading "v" (v0.0.1); CMake's project()
+    # version parser expects a bare numeric version.
+    string(REGEX REPLACE "^v" "" _obs_version "${_obs_version}")
     string(REGEX REPLACE "([0-9]+)\\.([0-9]+)\\.([0-9]+).*" "\\1;\\2;\\3" _obs_version_canonical ${_obs_version})
   endif()
 elseif(DEFINED OBS_VERSION_OVERRIDE)

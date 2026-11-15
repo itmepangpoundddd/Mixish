@@ -18,20 +18,22 @@
 #include "MixishTransitionPanel.hpp"
 #include "MixishOverlayStrip.hpp"
 #include "MixishSwitcher.hpp"
+#include "MixishTBar.hpp"
 #include "MixishTheme.hpp"
 
 #include <widgets/OBSBasic.hpp>
 
 #include <QFont>
 #include <QCoreApplication>
+#include <QDateTime>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
 #include <QLayoutItem>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QSignalBlocker>
-#include <QSlider>
 #include <QSpinBox>
 #include <QStyle>
 #include <QTimer>
@@ -41,8 +43,6 @@
 #include "moc_MixishTransitionPanel.cpp"
 
 #include <algorithm>
-
-static constexpr int kTBarPrecision = 1024;
 
 MixishTransitionPanel::MixishTransitionPanel(MixishSwitcher *switcher_, OBSBasic *main_, QWidget *parent)
 	: QFrame(parent),
@@ -67,11 +67,24 @@ MixishTransitionPanel::MixishTransitionPanel(MixishSwitcher *switcher_, OBSBasic
 	panelScroll->setWidgetResizable(true);
 	panelScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 	panelScroll->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+	transitionScroll = panelScroll;
 
 	auto *content = new QWidget(panelScroll);
 	content->setObjectName(QStringLiteral("mixishTransitionContent"));
 	panelScroll->setWidget(content);
 	panelLayout->addWidget(panelScroll);
+
+	/* The manual T-bar is pinned below the scrolling transition list so it
+	 * is always visible and reachable at 1366x768. */
+	auto *tBarHost = new QWidget(this);
+	tBarHost->setObjectName(QStringLiteral("mixishTBarHost"));
+	auto *tBarLayout = new QVBoxLayout(tBarHost);
+	tBarLayout->setContentsMargins(MixishTheme::Space2, MixishTheme::Space1,
+				       MixishTheme::Space2, 0);
+	tBarLayout->setSpacing(0);
+	tBar = new MixishTBar(tBarHost);
+	tBarLayout->addWidget(tBar);
+	panelLayout->addWidget(tBarHost);
 
 	auto *outer = new QVBoxLayout(content);
 	outer->setContentsMargins(MixishTheme::Space2, MixishTheme::Space2,
@@ -176,13 +189,6 @@ MixishTransitionPanel::MixishTransitionPanel(MixishSwitcher *switcher_, OBSBasic
 	durationSpin->setToolTip(tr("Transition duration in milliseconds"));
 	headerRow->insertWidget(2, durationSpin);
 
-	tBar = new QSlider(Qt::Horizontal, this);
-	tBar->setObjectName(QStringLiteral("mixishTBar"));
-	tBar->setRange(0, kTBarPrecision - 1);
-	tBar->setMinimumHeight(MixishTheme::IconButtonSize);
-	tBar->setToolTip(tr("Manual transition (T-bar): drag right for Program, left for Preview"));
-	outer->addWidget(tBar);
-
 	outer->addStretch(1);
 
 	connect(cutButton, &QPushButton::clicked, this, &MixishTransitionPanel::OnCutClicked);
@@ -191,8 +197,12 @@ MixishTransitionPanel::MixishTransitionPanel(MixishSwitcher *switcher_, OBSBasic
 	connect(addButton, &QPushButton::clicked, this, &MixishTransitionPanel::OnAddClicked);
 	connect(configureButton, &QPushButton::clicked, this, &MixishTransitionPanel::OnConfigureClicked);
 	connect(durationSpin, &QSpinBox::valueChanged, this, &MixishTransitionPanel::OnDurationChanged);
-	connect(tBar, &QSlider::valueChanged, this, &MixishTransitionPanel::OnTBarChanged);
-	connect(tBar, &QSlider::sliderReleased, this, &MixishTransitionPanel::OnTBarReleased);
+	connect(tBar, &MixishTBar::valueChanged, this, &MixishTransitionPanel::OnTBarChanged);
+	connect(tBar, &MixishTBar::dragFinished, this, &MixishTransitionPanel::OnTBarDragFinished);
+	connect(tBar, &MixishTBar::reachedEnd, this, &MixishTransitionPanel::OnTBarReachedEnd);
+	connect(tBar, &MixishTBar::cancelRequested, this, &MixishTransitionPanel::OnTBarCancel);
+	connect(tBar, &MixishTBar::animationFinished, this,
+		&MixishTransitionPanel::OnTBarAnimationFinished);
 
 	connect(main, &OBSBasic::CurrentTransitionChanged, this, &MixishTransitionPanel::OnCurrentTransitionChanged);
 	connect(main, &OBSBasic::TransitionAdded, this, &MixishTransitionPanel::OnTransitionsChanged);
@@ -205,15 +215,33 @@ MixishTransitionPanel::MixishTransitionPanel(MixishSwitcher *switcher_, OBSBasic
 	tickTimer = new QTimer(this);
 	tickTimer->setInterval(150);
 	connect(tickTimer, &QTimer::timeout, this, &MixishTransitionPanel::Tick);
+
+	progressTimer = new QTimer(this);
+	progressTimer->setInterval(33);
+	connect(progressTimer, &QTimer::timeout, this,
+		&MixishTransitionPanel::UpdateTransitionProgress);
+
 	connect(qApp, &QCoreApplication::aboutToQuit, this, [this]() {
 		if (tickTimer)
 			tickTimer->stop();
+		if (progressTimer)
+			progressTimer->stop();
 	});
 	tickTimer->start();
 
 	MixishTheme::Apply(this);
 
 	RefreshTransitions();
+}
+
+void MixishTransitionPanel::showEvent(QShowEvent *event)
+{
+	QFrame::showEvent(event);
+
+	/* At 768p the column scrolls; always open on Cut/Fade rather than on a
+	 * previously scrolled part of the list. */
+	if (transitionScroll)
+		transitionScroll->verticalScrollBar()->setValue(0);
 }
 
 void MixishTransitionPanel::RefreshTransitions()
@@ -279,7 +307,10 @@ void MixishTransitionPanel::AddTransitionButton(const QString &uuid, const QStri
 	button->setFixedHeight(MixishTheme::ControlHeight);
 	button->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 	button->setToolTip(tr("Transition to Program using %1").arg(name));
-	connect(button, &QPushButton::clicked, this, [this, uuid]() { switcher->TriggerTransition(uuid); });
+	connect(button, &QPushButton::clicked, this, [this, uuid]() {
+		BeginTransitionFollow();
+		switcher->TriggerTransition(uuid);
+	});
 
 	customLayout->addWidget(button);
 	transitionButtons.insert(uuid, button);
@@ -344,19 +375,22 @@ void MixishTransitionPanel::UpdateBusyState()
 			it.value()->setEnabled(enabled);
 	}
 
-	if (tBar && !tBar->isSliderDown()) {
+	if (tBar) {
+		const bool usable = main->IsPreviewProgramMode();
+		if (tBar->isEnabled() != usable)
+			tBar->setEnabled(usable);
+	}
+
+	if (tBar && !followingTransition && !committingTBar && !tBar->isDragging() &&
+	    !tBar->isAnimating()) {
 		if (!transitioning && !switcher->TBarActive()) {
-			if (tBar->value() != 0) {
-				QSignalBlocker block(tBar);
-				tBar->setValue(0);
-			}
+			if (tBar->value() != 0)
+				tBar->resetToStart();
 			switcher->ResetTBarIfIdle();
-		} else {
+		} else if (switcher->TBarActive()) {
 			const int position = switcher->TBarPosition();
-			if (tBar->value() != position) {
-				QSignalBlocker block(tBar);
+			if (tBar->value() != position)
 				tBar->setValue(position);
-			}
 		}
 	}
 }
@@ -369,22 +403,44 @@ void MixishTransitionPanel::Tick()
 	UpdateBusyState();
 	UpdateActiveState();
 	UpdateFtbState();
+
+	/* Transitions triggered from a hotkey or another OBS window still get
+	 * the handle animation; button clicks start following immediately.
+	 * A finished manual transition reports time 0.0 or 1.0 while its
+	 * source is still active, so only follow real progress. */
+	if (!followingTransition && !committingTBar && tBar && !tBar->isDragging() &&
+	    !tBar->isAnimating() &&
+	    QDateTime::currentMSecsSinceEpoch() >= followSuppressedUntil) {
+		OBSSourceAutoRelease transition = obs_get_output_source(0);
+		if (transition && obs_transition_is_active(transition) &&
+		    !switcher->TBarActive()) {
+			const float time = obs_transition_get_time(transition);
+			if (time > 0.001f && time < 0.999f)
+				BeginTransitionFollow();
+		}
+	}
 }
 
 void MixishTransitionPanel::OnCutClicked()
 {
 	switcher->CutPreviewToProgram();
+	if (tBar)
+		tBar->playPulse();
 }
 
 void MixishTransitionPanel::OnFadeClicked()
 {
 	const QString fadeUuid = switcher->FadeTransitionUuid();
-	if (!fadeUuid.isEmpty())
-		switcher->TriggerTransition(fadeUuid);
+	if (fadeUuid.isEmpty())
+		return;
+
+	BeginTransitionFollow();
+	switcher->TriggerTransition(fadeUuid);
 }
 
 void MixishTransitionPanel::OnFtbClicked()
 {
+	BeginTransitionFollow();
 	switcher->ToggleFadeToBlack();
 }
 
@@ -416,23 +472,142 @@ void MixishTransitionPanel::OnDurationChangedExternally(int ms)
 
 void MixishTransitionPanel::OnTBarChanged(int value)
 {
-	if (syncingTBar)
-		return;
-
-	switcher->SetTBarPosition(value);
+	if (switcher)
+		switcher->SetTBarPosition(value);
 }
 
-void MixishTransitionPanel::OnTBarReleased()
+void MixishTransitionPanel::OnTBarDragFinished(int value)
 {
-	switcher->ReleaseTBar();
+	if (!tBar || followingTransition || committingTBar)
+		return;
 
-	if (tBar) {
-		syncingTBar = true;
-		tBar->setValue(switcher->TBarPosition());
-		syncingTBar = false;
+	/* Release never leaves a manual transition half-applied: snap to the
+	 * nearest end and complete or cancel it. */
+	CompleteTBar(value >= tBar->maximum() / 2);
+}
+
+void MixishTransitionPanel::OnTBarReachedEnd(bool programSide)
+{
+	if (followingTransition || committingTBar)
+		return;
+
+	CompleteTBar(programSide);
+}
+
+void MixishTransitionPanel::OnTBarCancel()
+{
+	if (followingTransition || committingTBar)
+		return;
+
+	CompleteTBar(false);
+}
+
+void MixishTransitionPanel::OnTBarAnimationFinished()
+{
+	if (committingTBar)
+		FinishTBarCommit();
+}
+
+void MixishTransitionPanel::CompleteTBar(bool toProgram)
+{
+	if (!tBar || committingTBar || followingTransition)
+		return;
+
+	const int target = toProgram ? tBar->maximum() : 0;
+
+	if (!toProgram && tBar->value() == 0 && !switcher->TBarActive()) {
+		tBar->resetToStart();
+		return;
 	}
 
+	committingTBar = true;
+	commitToProgram = toProgram;
+	tBar->setLocked(true);
+
+	if (tBar->value() != target)
+		tBar->animateTo(target, 130, true);
+	else
+		FinishTBarCommit();
+}
+
+void MixishTransitionPanel::FinishTBarCommit()
+{
+	if (!tBar)
+		return;
+
+	const bool toProgram = commitToProgram;
+	committingTBar = false;
+
+	if (toProgram) {
+		switcher->SetTBarPosition(tBar->maximum());
+		switcher->ReleaseTBar();
+	} else if (switcher->TBarActive() || tBar->value() > 0) {
+		switcher->SetTBarPosition(0);
+		switcher->ReleaseTBar();
+	}
+
+	tBar->resetToStart();
+	tBar->setLocked(false);
+	followSuppressedUntil = QDateTime::currentMSecsSinceEpoch() + 700;
 	UpdateBusyState();
+}
+
+void MixishTransitionPanel::BeginTransitionFollow()
+{
+	if (!tBar || followingTransition)
+		return;
+
+	followingTransition = true;
+	sawTransitionProgress = false;
+	followTicks = 0;
+	tBar->setLocked(true);
+	/* Move focus off the clicked transition button before it is disabled;
+	 * otherwise Qt walks the focus chain and scrolls the list. */
+	tBar->setFocus(Qt::OtherFocusReason);
+	if (progressTimer)
+		progressTimer->start();
+}
+
+void MixishTransitionPanel::EndTransitionFollow()
+{
+	if (progressTimer)
+		progressTimer->stop();
+
+	followingTransition = false;
+	sawTransitionProgress = false;
+	followTicks = 0;
+
+	if (tBar) {
+		tBar->setLocked(false);
+		tBar->resetToStart();
+	}
+	followSuppressedUntil = QDateTime::currentMSecsSinceEpoch() + 400;
+	UpdateBusyState();
+}
+
+void MixishTransitionPanel::UpdateTransitionProgress()
+{
+	if (!followingTransition)
+		return;
+
+	if (!main || main->isClosing()) {
+		EndTransitionFollow();
+		return;
+	}
+
+	OBSSourceAutoRelease transition = obs_get_output_source(0);
+	if (transition && obs_transition_is_active(transition)) {
+		const float time = std::clamp(obs_transition_get_time(transition), 0.0f, 1.0f);
+		tBar->setExternalProgress(time);
+		sawTransitionProgress = true;
+		followTicks = 0;
+		return;
+	}
+
+	/* Give the transition a tick to register, then unlock. Cut has no
+	 * active period, so it uses the visual pulse instead. */
+	if (sawTransitionProgress || ++followTicks > 12)
+		EndTransitionFollow();
 }
 
 void MixishTransitionPanel::OnCurrentTransitionChanged(const QString &)
