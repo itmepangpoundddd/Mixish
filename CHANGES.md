@@ -211,6 +211,16 @@ Kept intentionally (credits / external references / internals):
 - `frontend/widgets/OBSBasic.hpp` - friend declaration so the controller can read/write the scene collection module data.
 - `README.md` - overlay persistence listed as a feature and removed from the limitations.
 
+## Real master audio bus
+
+- `libobs/obs-internal.h` - `obs_core_audio` gains `master_volume_db100` (dB × 100, written by the UI thread) and `master_peak` (linear peak of the last program block).
+- `libobs/obs.h` / `obs.c` - new public API: `obs_set_master_volume_db()`, `obs_get_master_volume_db()` (clamped to −96..+12 dB) and `obs_get_master_peak()`.
+- `libobs/obs-audio.c` - `apply_master_gain()` runs on the audio thread after all render-order sources have been summed: it scales every output mix and measures the peak of mix 0 (program). The gain is therefore part of the encoded stream/recording, not a per-source fader. Peak is zeroed while the mixer is buffering.
+- `frontend/widgets/mixish/MixishAudioMixer.hpp` / `.cpp` - replaced the “first output device as MASTER” logic with a real master strip: −60..+6 dB slider (0.1 dB steps), dB readout, mute button, and a custom post-gain peak meter polled every 50 ms. Desktop Audio and every other audio input now appear as normal rows. Master dB and mute are stored as `Mixish/MasterVolumeDb` and `Mixish/MasterMuted` in the user config and restored on startup.
+- `frontend/widgets/mixish/MixishAudioMixer.cpp` - a silent `audio_output_connect()` sink keeps program mix 0 active while the mixer is open, so the master and per-input meters are live even when nothing is recording or streaming.
+- `frontend/forms/mixish/mixish.qss` - master mute button states (neutral, hover, red when muted).
+- Tested: libobs + frontend build clean; master meter tracks the program; mute sets the bus to −96 dB; a 5 s recording captured at 0 dB measured −14.2 dB mean / −0.4 dB peak, the same recording with master muted measured −91 dB (digital silence). Restart restored −1.0 dB and the mute state from the config.
+
 ## Later tasks (not started)
 
 - Title input (templated text/lower-third, quick text edit) - effort medium; risk medium.

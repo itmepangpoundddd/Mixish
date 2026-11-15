@@ -22,10 +22,11 @@
 #include <QStringList>
 
 class MixishSwitcher;
-class VolumeControl;
 class QLabel;
 class QScrollArea;
+class QSlider;
 class QTimer;
+class QToolButton;
 class QVBoxLayout;
 class QWidget;
 
@@ -33,29 +34,36 @@ class QWidget;
  *
  * Each row is OBS's own VolumeControl (fader, mute, level meter, monitor
  * toggle) and the source list comes from the running scene collection. The
- * master row controls the Desktop Audio output device when one is configured.
- * Rows are laid out horizontally so they fit the height of the tile row. */
+ * master row drives the Mixish master bus in libobs: gain is applied to the
+ * final program mix (stream/recording), and the meter reads the post-gain
+ * program peak. Rows are laid out vertically in a scroller. */
 class MixishAudioMixer : public QFrame {
 	Q_OBJECT
 
 public:
 	explicit MixishAudioMixer(MixishSwitcher *switcher, QWidget *parent = nullptr);
 
-	/* Re-reads the master device and the audio source list. */
+	/* Re-reads the audio source list. */
 	void Refresh();
 
 protected:
 	void showEvent(QShowEvent *event) override;
 
 private:
-	void RebuildMaster();
+	void BuildMaster();
+	void EnsureProgramMixAlive();
 	void RebuildRows();
+	void UpdateMasterGain();
+	void SaveMasterConfig();
 
 	MixishSwitcher *switcher = nullptr;
 
 	QPointer<QWidget> masterHost = nullptr;
-	QPointer<VolumeControl> master = nullptr;
 	QPointer<QLabel> masterName = nullptr;
+	QPointer<QSlider> masterSlider = nullptr;
+	QPointer<QLabel> masterValue = nullptr;
+	QPointer<QToolButton> masterMute = nullptr;
+	QPointer<QWidget> masterMeter = nullptr;
 
 	QPointer<QScrollArea> scrollArea = nullptr;
 	QPointer<QWidget> rowsHost = nullptr;
@@ -63,6 +71,8 @@ private:
 	QPointer<QLabel> emptyLabel = nullptr;
 
 	QPointer<QTimer> refreshTimer;
-	QString currentMasterUuid;
 	QStringList rowsSignature;
+	bool masterBuilt = false;
+	bool keepAliveConnected = false;
+	float lastMasterDb = 0.0f;
 };

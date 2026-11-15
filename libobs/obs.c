@@ -16,6 +16,7 @@
 ******************************************************************************/
 
 #include <inttypes.h>
+#include <math.h>
 
 #include "audio-monitoring/monitoring-mix.h"
 #include "graphics/matrix4.h"
@@ -1831,6 +1832,37 @@ void obs_leave_graphics(void)
 audio_t *obs_get_audio(void)
 {
 	return obs->audio.audio;
+}
+
+void obs_set_master_volume_db(float db)
+{
+	if (!obs)
+		return;
+
+	if (isnan(db))
+		db = 0.0f;
+	if (db < -96.0f)
+		db = -96.0f;
+	if (db > 12.0f)
+		db = 12.0f;
+
+	obs->audio.master_volume_db100 = lroundf(db * 100.0f);
+}
+
+float obs_get_master_volume_db(void)
+{
+	if (!obs)
+		return 0.0f;
+
+	return (float)obs->audio.master_volume_db100 / 100.0f;
+}
+
+float obs_get_master_peak(void)
+{
+	if (!obs)
+		return 0.0f;
+
+	return obs->audio.master_peak;
 }
 
 video_t *obs_get_video(void)

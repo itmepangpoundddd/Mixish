@@ -737,6 +737,13 @@ EXPORT void obs_leave_graphics(void);
 /** Gets the main audio output handler for this OBS context */
 EXPORT audio_t *obs_get_audio(void);
 
+/* Mixish master bus: gain applied to the final program mix (stream and
+ * recording) after all sources have been summed. Range -96..+12 dB. */
+EXPORT void obs_set_master_volume_db(float db);
+EXPORT float obs_get_master_volume_db(void);
+/* Linear peak of the last mixed block (post master gain), for meters. */
+EXPORT float obs_get_master_peak(void);
+
 /** Gets the main video output handler for this OBS context */
 EXPORT video_t *obs_get_video(void);
 

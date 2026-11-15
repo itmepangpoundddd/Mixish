@@ -465,6 +465,11 @@ struct obs_core_audio {
 
 	struct obs_source *monitoring_duplicating_source;
 	struct monitoring_mix_data *monitoring_mix;
+
+	/* Mixish master bus: applied to every output mix after all sources
+	 * have been summed. Stored as dB * 100 for atomic access. */
+	volatile long master_volume_db100;
+	volatile float master_peak;
 };
 
 /* user sources, output channels, and displays */

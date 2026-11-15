@@ -16,6 +16,7 @@
 ******************************************************************************/
 
 #include <inttypes.h>
+#include <math.h>
 #include "obs-internal.h"
 #include "util/util_uint64.h"
 
@@ -117,6 +118,41 @@ static inline void mix_audio(struct audio_output_data *mixes, obs_source_t *sour
 				*(mix++) += *(aud++);
 		}
 	}
+}
+
+/* Mixish master bus: scales every output mix after all sources have been
+ * summed, then measures the program (mix 0) peak. Runs on the audio thread,
+ * so the public setters only store a value in dB * 100. The program mix is
+ * always summed by mix_audio(), even when no output is connected, so the
+ * meter works before recording/streaming starts. */
+static void apply_master_gain(struct obs_core_audio *audio, struct audio_output_data *mixes, size_t channels)
+{
+	const float db = (float)audio->master_volume_db100 / 100.0f;
+	const float gain = db <= -96.0f ? 0.0f : powf(10.0f, db / 20.0f);
+	float peak = 0.0f;
+
+	for (size_t mix_idx = 0; mix_idx < MAX_AUDIO_MIXES; mix_idx++) {
+		for (size_t ch = 0; ch < channels; ch++) {
+			float *data = mixes[mix_idx].data[ch];
+			if (!data)
+				continue;
+
+			if (gain != 1.0f) {
+				for (size_t i = 0; i < AUDIO_OUTPUT_FRAMES; i++)
+					data[i] *= gain;
+			}
+
+			if (mix_idx == 0) {
+				for (size_t i = 0; i < AUDIO_OUTPUT_FRAMES; i++) {
+					const float level = fabsf(data[i]);
+					if (level > peak)
+						peak = level;
+				}
+			}
+		}
+	}
+
+	audio->master_peak = peak;
 }
 
 static bool ignore_audio(obs_source_t *source, size_t channels, size_t sample_rate, uint64_t start_ts)
@@ -684,6 +720,10 @@ bool audio_callback(void *param, uint64_t start_ts_in, uint64_t end_ts_in, uint6
 
 			pthread_mutex_unlock(&source->audio_buf_mutex);
 		}
+
+		apply_master_gain(audio, mixes, channels);
+	} else {
+		audio->master_peak = 0.0f;
 	}
 
 	/* ------------------------------------------------ */

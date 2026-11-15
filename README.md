@@ -21,7 +21,9 @@ while keeping the OBS engine (scenes, sources, transitions, encoding) underneath
   Assignments, audio, fade and geometry persist per scene collection; channels
   always start off.
 - **Audio mixer** docked next to the input tiles: per-input faders, mute, meters and
-  monitor toggles, plus a master strip for the first audio output device.
+  monitor toggles, plus a real master strip. The master gain is applied after
+  the program mix in libobs (so it affects recording/streaming), has a post-gain
+  peak meter, and its level and mute state persist across restarts.
 - **Media transport** for the selected input (seek, play/pause, restart, previous/next).
 - **Input Properties** dialog with a dark OBS property form and a large live preview.
 - **Recording / Streaming settings** dialogs modeled after a hardware switcher.
