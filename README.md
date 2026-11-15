@@ -18,6 +18,8 @@ while keeping the OBS engine (scenes, sources, transitions, encoding) underneath
   T-bar and a scrollable list of OBS transitions.
 - **Four overlay channels (OV1-OV4)** rendered above Program, independent of
   Cut / Fade / T-bar. Per-channel assignment, on/off, audio and fade editor.
+  Assignments, audio, fade and geometry persist per scene collection; channels
+  always start off.
 - **Audio mixer** docked next to the input tiles: per-input faders, mute, meters and
   monitor toggles, plus a master strip for the first audio output device.
 - **Media transport** for the selected input (seek, play/pause, restart, previous/next).
@@ -79,7 +81,6 @@ The build product is not committed; attach installers to GitHub Releases.
 
 ## Current limitations
 
-- Overlay channel assignments are not persisted across restarts yet.
 - Recording/streaming settings map to OBS **Simple Output**; advanced-output-only
   options (file splitting, independent recording bitrate) are not exposed.
 - The installer is not code-signed, so Windows SmartScreen may show

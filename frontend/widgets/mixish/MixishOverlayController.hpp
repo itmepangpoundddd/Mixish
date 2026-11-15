@@ -103,6 +103,10 @@ public:
 	 * scenes and clears the "collection changing" guard. */
 	void OnSceneCollectionLoaded();
 
+	/* Restores the saved per-collection overlay state (assignments, audio,
+	 * fade settings and geometry). ON/OFF is intentionally not restored. */
+	void RestoreState();
+
 	/* Periodic safety net: keeps the stage scenes on their video channels
 	 * and drops assignments whose input disappeared. */
 	void Sync();
@@ -145,6 +149,7 @@ private:
 	void ApplyGeometry(int index);
 	void ApplyAudio(int index);
 	void DetachTransition(int index);
+	void SaveState();
 	void Notify(int index);
 
 	bool IsValidIndex(int index) const;
@@ -159,4 +164,6 @@ private:
 
 	bool shutdown = false;
 	bool collectionChanging = false;
+	bool restoringState = false;
+	bool stateLoaded = false;
 };

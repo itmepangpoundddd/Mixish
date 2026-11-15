@@ -205,6 +205,8 @@ void MixishOverlayController::Shutdown()
 		channel.inputName.clear();
 	}
 
+	stateLoaded = false;
+
 	/* Scene destruction happens on the OBS task thread. Waiting here makes
 	 * sure the stage scenes (and the items referencing their inputs) are
 	 * gone before libobs begins tearing down the source graph. */
@@ -712,6 +714,7 @@ void MixishOverlayController::PrepareForSceneCollectionChange()
 		return;
 
 	collectionChanging = true;
+	stateLoaded = false;
 
 	/* OBS has already called obs_source_remove() on every source when this
 	 * runs, but none of them are destroyed until the destroy queue drains.
@@ -771,10 +774,13 @@ void MixishOverlayController::OnSceneCollectionLoaded()
 
 	collectionChanging = false;
 
-	for (int i = 0; i < ActiveChannels; ++i) {
+	for (int i = 0; i < ActiveChannels; ++i)
 		EnsureStage(i);
+
+	RestoreState();
+
+	for (int i = 0; i < ActiveChannels; ++i)
 		Notify(i);
-	}
 
 	ReloadChannels();
 }
@@ -804,8 +810,125 @@ void MixishOverlayController::Sync()
 	ReloadChannels();
 }
 
+void MixishOverlayController::SaveState()
+{
+	if (shutdown || collectionChanging || restoringState || !main)
+		return;
+
+	obs_data_t *modules = main->collectionModuleData;
+	if (!modules) {
+		modules = obs_data_create();
+		main->collectionModuleData = modules;
+	}
+
+	OBSDataAutoRelease root = obs_data_create();
+	obs_data_set_int(root, "version", 1);
+
+	OBSDataArrayAutoRelease channelsData = obs_data_array_create();
+	for (int i = 0; i < ActiveChannels; ++i) {
+		Channel &channel = channels[i];
+		obs_source_t *source =
+			channel.item ? obs_sceneitem_get_source(channel.item.Get()) : nullptr;
+		if (!source)
+			continue;
+
+		OBSDataAutoRelease data = obs_data_create();
+		obs_data_set_int(data, "channel", i);
+		obs_data_set_string(data, "uuid", obs_source_get_uuid(source));
+		obs_data_set_bool(data, "audio", channel.audio);
+		obs_data_set_bool(data, "fade", channel.fadeMode);
+		obs_data_set_int(data, "fadeIn", channel.fadeInMs);
+		obs_data_set_int(data, "fadeOut", channel.fadeOutMs);
+		obs_data_set_bool(data, "geometry", channel.hasGeometry);
+
+		if (channel.hasGeometry) {
+			obs_data_set_double(data, "x", channel.rect.x());
+			obs_data_set_double(data, "y", channel.rect.y());
+			obs_data_set_double(data, "w", channel.rect.width());
+			obs_data_set_double(data, "h", channel.rect.height());
+			obs_data_set_int(data, "cropLeft", channel.crop.left);
+			obs_data_set_int(data, "cropTop", channel.crop.top);
+			obs_data_set_int(data, "cropRight", channel.crop.right);
+			obs_data_set_int(data, "cropBottom", channel.crop.bottom);
+		}
+
+		obs_data_array_push_back(channelsData, data);
+	}
+
+	obs_data_set_array(root, "channels", channelsData);
+	obs_data_set_obj(modules, "mixish_overlay", root);
+}
+
+void MixishOverlayController::RestoreState()
+{
+	if (shutdown || collectionChanging || stateLoaded)
+		return;
+
+	stateLoaded = true;
+
+	if (!main || !main->collectionModuleData)
+		return;
+
+	OBSDataAutoRelease root = obs_data_get_obj(main->collectionModuleData, "mixish_overlay");
+	if (!root)
+		return;
+
+	OBSDataArrayAutoRelease list = obs_data_get_array(root, "channels");
+	if (!list)
+		return;
+
+	restoringState = true;
+	const size_t count = obs_data_array_count(list);
+
+	for (size_t n = 0; n < count; ++n) {
+		OBSDataAutoRelease data = obs_data_array_item(list, n);
+		const int index = int(obs_data_get_int(data, "channel"));
+		if (!IsValidIndex(index) || channels[index].item)
+			continue;
+
+		const char *uuid = obs_data_get_string(data, "uuid");
+		if (!uuid || !*uuid)
+			continue;
+
+		OBSSourceAutoRelease source = obs_get_source_by_uuid(uuid);
+		if (!source)
+			continue;
+
+		OBSScene scene = obs_scene_from_source(source);
+		if (!scene || !CanAssign(index, scene))
+			continue;
+
+		if (!Assign(index, scene, false))
+			continue;
+
+		SetAudioEnabled(index, obs_data_get_bool(data, "audio"));
+		SetFade(index, obs_data_get_bool(data, "fade"));
+		SetFadeTimes(index, int(obs_data_get_int(data, "fadeIn")),
+			     int(obs_data_get_int(data, "fadeOut")));
+
+		if (obs_data_get_bool(data, "geometry")) {
+			QRectF rect(obs_data_get_double(data, "x"), obs_data_get_double(data, "y"),
+				    obs_data_get_double(data, "w"),
+				    obs_data_get_double(data, "h"));
+			SetRect(index, rect);
+
+			obs_sceneitem_crop crop = {};
+			crop.left = int(obs_data_get_int(data, "cropLeft"));
+			crop.top = int(obs_data_get_int(data, "cropTop"));
+			crop.right = int(obs_data_get_int(data, "cropRight"));
+			crop.bottom = int(obs_data_get_int(data, "cropBottom"));
+			SetCrop(index, crop);
+		}
+
+		blog(LOG_INFO, "Mixish: overlay %d restored from scene collection", index + 1);
+	}
+
+	restoringState = false;
+}
+
 void MixishOverlayController::Notify(int index)
 {
+	SaveState();
 	emit ChannelChanged(index);
 	emit ChannelsChanged();
 }

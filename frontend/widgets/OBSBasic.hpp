@@ -214,6 +214,7 @@ class OBSBasic : public OBSMainWindow {
 	friend class MixishTopBar;
 	friend class MixishInputBar;
 	friend class MixishOverlayPanel;
+	friend class MixishOverlayController;
 	friend class MixishRecordingSettings;
 	friend class MixishStreamingSettings;
 	friend class Auth;

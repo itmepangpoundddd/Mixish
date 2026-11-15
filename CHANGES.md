@@ -205,6 +205,12 @@ Kept intentionally (credits / external references / internals):
 - Tested: silent install to a temporary folder, launch (window title "Mixish Studio 0.0.1"), clean exit, silent uninstall removed the install directory.
 - Notes: the installer is not code-signed (SmartScreen may warn). Application configuration still uses `%APPDATA%\obs-studio`; uninstall leaves user data in place. Other language locale files still contain OBS in their translations.
 
+## Overlay state persistence
+
+- `frontend/widgets/mixish/MixishOverlayController.hpp` / `.cpp` - overlay state is now saved in the scene collection's `modules` block under `mixish_overlay` (version 1): assigned input UUID, audio, fade mode and in/out times, geometry and crop. The state is written live on every change and restored when a scene collection is loaded. ON/OFF is intentionally not saved — channels always start off.
+- `frontend/widgets/OBSBasic.hpp` - friend declaration so the controller can read/write the scene collection module data.
+- `README.md` - overlay persistence listed as a feature and removed from the limitations.
+
 ## Later tasks (not started)
 
 - Title input (templated text/lower-third, quick text edit) - effort medium; risk medium.
