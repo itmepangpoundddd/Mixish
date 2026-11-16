@@ -71,14 +71,26 @@ target_sources(
     widgets/mixish/MixishInputProperties.hpp
     widgets/mixish/MixishInputTile.cpp
     widgets/mixish/MixishInputTile.hpp
+    widgets/mixish/MixishMediaTransport.cpp
+    widgets/mixish/MixishMediaTransport.hpp
     widgets/mixish/MixishOverlayController.cpp
     widgets/mixish/MixishOverlayController.hpp
     widgets/mixish/MixishOverlayPanel.cpp
     widgets/mixish/MixishOverlayPanel.hpp
     widgets/mixish/MixishOverlayStrip.cpp
     widgets/mixish/MixishOverlayStrip.hpp
+    widgets/mixish/MixishPlaylistController.cpp
+    widgets/mixish/MixishPlaylistController.hpp
+    widgets/mixish/MixishPlaylistManager.cpp
+    widgets/mixish/MixishPlaylistManager.hpp
+    widgets/mixish/MixishPlaylistPanel.cpp
+    widgets/mixish/MixishPlaylistPanel.hpp
+    widgets/mixish/MixishProgramTransport.cpp
+    widgets/mixish/MixishProgramTransport.hpp
     widgets/mixish/MixishRecordingSettings.cpp
     widgets/mixish/MixishRecordingSettings.hpp
+    widgets/mixish/MixishSplash.cpp
+    widgets/mixish/MixishSplash.hpp
     widgets/mixish/MixishStreamingSettings.cpp
     widgets/mixish/MixishStreamingSettings.hpp
     widgets/mixish/MixishSwitcher.cpp

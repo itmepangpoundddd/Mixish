@@ -20,17 +20,16 @@
 #include <obs.hpp>
 
 #include <QFrame>
+#include <QPointer>
 
 class MixishSwitcher;
-class MediaControls;
-class QLabel;
+class MixishMediaTransport;
 
 /* Video transport for the selected input tile.
  *
- * Wraps OBS's own MediaControls component, so seeking, time display and
- * play/pause/restart are the same code paths the rest of OBS uses. When the
- * selected input has no controllable media source the bar stays visible but
- * disabled. */
+ * This is a thin adapter over MixishMediaTransport: it finds the first
+ * controllable media source in the selected scene and binds it. The Program
+ * transport uses the same MixishMediaTransport widget. */
 class MixishVideoControls : public QFrame {
 	Q_OBJECT
 
@@ -41,8 +40,12 @@ public:
 	void SetScene(OBSScene scene);
 	bool HasMedia() const;
 
+	/* The shared transport widget, so the switcher can listen for the
+	 * user's own play requests. Defined in the .cpp to keep the QPointer
+	 * conversion out of headers that only forward declare the type. */
+	MixishMediaTransport *Transport() const;
+
 private:
 	MixishSwitcher *switcher = nullptr;
-	MediaControls *controls = nullptr;
-	QLabel *placeholder = nullptr;
+	QPointer<MixishMediaTransport> transport;
 };

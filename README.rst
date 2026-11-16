@@ -6,7 +6,7 @@ Mixish turns OBS Studio into a hardware-style switcher: Preview/Program monitors
 scene tiles, a transition column, four overlay channels and a docked audio mixer,
 while keeping the OBS engine (scenes, sources, transitions, encoding) underneath.
 
-> **Status:** early development (`0.0.1`). Expect rough edges; not yet recommended
+> **Status:** early development (`0.0.2`). Expect rough edges; not yet recommended
 > for unattended live production.
 
 ## Features

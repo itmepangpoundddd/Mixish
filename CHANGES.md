@@ -5,6 +5,14 @@ OBS Studio is licensed under GPL-2.0-or-later. Mixish keeps all original OBS
 copyright and license notices, and adds Mixish copyright notices only to new or
 modified work.
 
+## Release 0.0.2
+
+- Version bumped from `0.0.1` to `0.0.2` in `README.md`, `README.rst` and `installer/mixish.iss` (AppVersion, AppVerName, output filename and VersionInfoVersion).
+- Release contents: Playlist input (Stage 1), shared media transport with a Program transport, the transition-safe media playback rewrite with the three vMix-style playback options, Del pruning of auto-created empty input scenes, the Add Input ordering fix, the `ThumbnailManager` stability fix, and the startup splash. Per-file details follow in the sections below.
+- `RELEASE_NOTES.md` - release notes for GitHub Releases.
+- Installer: `G:\Mixish\obs-studio-master\dist\Mixish-Setup-0.0.2-x64.exe` (Inno Setup 7, `"C:\Program Files\Inno Setup 7\ISCC.exe" installer\mixish.iss`).
+- Tag: `v0.0.2`.
+
 ## Build environment notes
 
 - Fetched missing git submodules from the source snapshot (`deps/libdshowcapture/src`, `plugins/obs-browser`, `plugins/obs-websocket`) so the Windows build can configure.
@@ -247,10 +255,82 @@ Kept intentionally (credits / external references / internals):
 - `README.md` - Timer feature.
 - Tested at 1366x768: Timer appears in Add Input with its icon and description; a created Timer renders the live clock in Preview and the tile thumbnail and updates every second; a 5 s countdown with auto-start reached 00:00:00; a stopwatch with auto-start counted from 00:00:06 to 00:00:09 across three seconds; source settings and the Timer scene persisted in the scene collection.
 
+## Playlist input - Stage 1
+
+- `frontend/widgets/mixish/MixishPlaylistController.hpp` / `.cpp` - new queue controller. It owns the queue order, current item, continuous auto-advance, missing-file skipping, end-of-queue hold, gap measurement and persistence. File changes use `obs_source_update()` on one native `ffmpeg_source`; the queue is structured so a second preloaded source can be added for gapless v2.
+- `frontend/widgets/mixish/MixishPlaylistManager.hpp` / `.cpp` - new manager. Creates a hidden Mixish scene plus native media source through `CreateInputScene()`, stores playlists under the scene collection's `modules` block as `mixish_playlist` (version 1), prunes records whose scene/media no longer exist, expands `.m3u`/`.m3u8` queue files (`#EXTINF` duration + title, relative paths resolved against the list), and probes unknown durations in the background.
+- `frontend/widgets/mixish/MixishMediaTransport.hpp` / `.cpp` - new shared transport widget built on OBS `MediaControls`. It is the single implementation used by both the existing INPUTS transport and the new Program transport; previous/next are repurposed for a Mixish queue only when queue navigation is enabled.
+- `frontend/widgets/mixish/MixishVideoControls.hpp` / `.cpp` - refactored as a thin INPUTS adapter over `MixishMediaTransport`; no second transport implementation.
+- `frontend/widgets/mixish/MixishProgramTransport.hpp` / `.cpp` - new reusable transport below the Program monitor. Shows the active queue position and next item, forwards previous/next to the current Program Playlist, and shares the same media source/controls as the INPUTS transport.
+- `frontend/widgets/mixish/MixishSwitcher.hpp` / `.cpp` - creates the playlist manager, adds/updates the Program transport in `programLayout`, binds it to the Program Playlist from `GetProgramSource()`, and drives playlist Preview/Program visibility. A playlist only plays while it is in Preview or Program; it stops when taken off air. Adds an optional scene-name argument to `CreateInputScene()`.
+- `frontend/widgets/mixish/MixishAddInputController.hpp` / `.cpp` - new synthetic **Playlist** type with icon and description. Create Input opens a multi-file picker and calls the playlist manager without opening source properties. OBS's native source-type handler is disconnected for the synthetic entry so it is never looked up as an OBS source type.
+- `frontend/forms/images/sources/playlist.svg`, `frontend/forms/obs.qrc` - new Playlist icon.
+- `frontend/widgets/OBSBasic.hpp` - friend declaration for the playlist manager (scene collection module data).
+- `frontend/cmake/ui-widgets.cmake` - registers the new transport/playlist sources.
+- `frontend/utility/ThumbnailManager.cpp` - stability fix required by the new scenes and playlist sources: remove **all** copies of a UUID from the thumbnail queues, ignore update requests after the thumbnail item is removed, and null-check queue entries before updating. This prevents a stale UUID from dereferencing a null item when OBS destroys a source while its thumbnail view is still alive.
+- `README.md` - Playlist feature, v1 gap limitation and M3U/M3U8 queue-import note.
+- `frontend/widgets/mixish/MixishPlaylistPanel.hpp` / `.cpp` - new Playlist queue tab/panel. Shows a playlist selector, Add/Edit/Remove, a queue list with green/gray availability markers, item titles and durations (`-` until known), missing markers, and Play Out / Auto Next / Auto First / Loop controls. Add and Edit use the native multi-file picker; Remove handles multi-selection. Edits call the same controller as playback.
+- `frontend/widgets/mixish/MixishPlaylistController.hpp` / `.cpp` - queue editing APIs (`AddItems`, `RemoveItems`, `ReplaceItem`), Loop and Auto First state with persistence, `PlayFirst`, and corrected duration caching. Durations are no longer taken from `media_started`/`media_ended` (a fast switch could return the previous file's duration); they come from `#EXTINF` or the background probe.
+- `frontend/widgets/mixish/MixishPlaylistManager.hpp` / `.cpp` - `ExpandFiles()` for panel Add/Edit, `QueueEdited()` persistence/probe notification, and a one-time `VerifyDurations()` pass when a queue is shown so stale or missing cached durations are refreshed.
+- `frontend/widgets/mixish/MixishInputBar.hpp` / `.cpp` - new Playlist tab beside Audio Mixer. The two tabs share the right-hand splitter pane; selecting a Playlist input auto-opens the Playlist tab, selecting a non-playlist input restores the mixer if it was previously active. Manual tab changes remain possible. The selected queue is resolved through the same scene UUID used by Program playback.
+- `frontend/forms/mixish/mixish.qss` - Playlist panel, queue-list, missing item and Auto Next selected styling.
+- `frontend/cmake/ui-widgets.cmake` - registers the panel sources.
+- Tested at 1366×768: created a 4-item queue from an `.m3u8` (`#EXTINF` 4/2/5/3 s, one missing file) and a 2-item `.m3u` without durations. The missing item was skipped; auto-advance played Red → Green → Blue; measured end-to-start gaps were 1.9–19.4 ms (first tests 14.1/19.4 ms, later 1.9/6.5/8.2/12.7 ms); the last frame was held after the queue ended (no black frame). The muted probe source discovered 5.000 s and 3.000 s for the items without `#EXTINF` within about one second; both were written to the collection cache and were not re-probed after restart. The Program transport showed `Playlist · n/total · Next: …`, previous/next switched items, and the playlist audio appeared on the mixer and MASTER meters. Queue order, current item, titles and probed durations survived an OBS restart.
+- Playlist tab verified visually: it opens automatically with the Playlist input selected, shows the queue and current item, and the Playlist/Audio Mixer tabs switch the same pane. With UI Automation (no mouse movement): Auto Next toggled `continuous` off/on, Auto First toggled `auto_first` on/off, Loop toggled `looping` on and a Program playback of the last item looped back to Red (`current` 3 → 0, measured loop gap 17.97 ms). Add selected `clip-extra.mp4` through the native file dialog (count 4 → 5, duration probed 2.0 s); Remove returned it to the original 4 items; Edit replaced the selected item through the file dialog. No new crash files were produced.
+- An intermediate close test exposed a separate OBS `ThumbnailManager` crash when a source was destroyed while its UUID remained queued. The guards above fixed it. The close test was repeated after the Playlist tab was added, launched with `--minimize-to-tray` and sent only `WM_CLOSE` (no mouse or keyboard automation): **10/10 clean exits, 0 new crash files**, with the same 2 pre-existing memory-leak reports.
+- `frontend/data/themes/Dark|Light/sources/playlist.svg` - new theme copies of the Playlist icon. OBS renders source icons from the active theme (`theme:Dark/sources/*.svg` with a light fill), not from the black qrc originals, so the Add Input entry was the only black icon on the dark theme. `MixishAddInputController::AddPlaylistTypeItem()` now resolves the icon with `App()->IsThemeDark()` and falls back to the qrc file. Verified visually in the Add Input dialog: the Playlist entry and its Recent chip are white like the native source icons.
+
+## Switcher fixes - media hold, empty input scenes, Add Input ordering
+
+### Media inputs no longer black out or deactivate during a Fade
+
+- `frontend/widgets/mixish/MixishSwitcher.hpp` / `.cpp` - new `MediaHold` list and `UpdateMediaActivity()`. Every controllable media source that appears in a scene-list scene (including groups and nested scenes) gets exactly one `obs_source_inc_active()` reference, so the decoder keeps running while the source's scene is off Program. Only clips Mixish paused are resumed (`pausedByUs`), so a user-initiated pause is never undone. `ReleaseMediaHolds()` drops the references and undoes Mixish's own pause on shutdown and when Mixish mode is left.
+- **Preview is not on air.** Air means Program plus, while `obs_transition_is_active()` is true, both transition children (`OBS_TRANSITION_SOURCE_A`/`_B`). Selecting an input in Preview therefore never starts its clip, and leaving Preview never pauses a clip that is still on Program.
+- The on-air test is **source-based**, not scene-identity-based. `MixishCollectAirMedia()` walks the media sources under `GetProgramSource()` and the two transition children, then compares source pointers. This is required because this configuration runs Studio Mode with `SceneDuplicationMode=true`: OBS stages a private duplicate scene for Program, so scene pointers never match the scene-list entries. Duplicates use `OBS_SCENE_DUP_PRIVATE_REFS` (`EditPropertiesMode=false`), so the duplicated scene references the same child sources and the pointers do match.
+- A clip is paused **after** the transition that takes it off air has finished, never at the start of it, so the outgoing fade always shows moving video instead of a frozen frame.
+- `PrimeMediaForTransition()` runs before the transition starts (`TriggerTransition`, `CutToProgram`, first T-bar movement, plus a transition-start fallback in `Sync()` for hotkeys/websocket). A clip that ended or was stopped restarts; any other clip resumes from the frame where it was paused, at the first frame of the fade. It never jumps back to 00:00 by itself.
+- A media source that OBS starts on its own because its scene became visible (typical right after a scene collection loads) is parked on its current frame once (`autoParked`). Later playback is treated as intentional: a play from the transport is recorded by `MarkUserPlayback()` through the new `MixishMediaTransport::playRequested()` signal, and an external play (websocket, hotkey) is left alone as well.
+- Playlist media sources are skipped by this scan (`MixishPlaylistManager::IsPlaylistSource()`); the playlist controller keeps its own activation/showing lifecycle.
+- Verified at 1366x768 with obs-websocket v5 driving Preview/Program and `GetMediaInputStatus`, Fade 1200 ms: clip on air → still `PLAYING` at +250 ms and +550 ms into the fade away, `PAUSED` only after the fade finished; Media Input selected in Preview only → stayed `PAUSED` with an unchanged cursor; fade back → `PLAYING` at +250 ms and continuing from the held frame (20416 → 20480, no restart); intentional off-air play → stayed `PLAYING` (57160 → 58090). Log: `playing media input 'Media' with transition` before the program switch, `pausing media input 'Media' (transition finished)` after it, `pausing media input 'Media' (off air)` once at startup.
+- Frame proof: 7 source screenshots between t=5 ms and t=625 ms of the fade into Media Input had luma 134.7-142.8 and **0 dark frames** (<12), i.e. the fade starts on the held frame instead of black. Frames saved to `%TEMP%\opencode\fadeframes`.
+
+### Media playback options (vMix style)
+
+- `frontend/widgets/mixish/MixishInputProperties.cpp` / `.hpp` - a `Playback` group appears for any input with `OBS_SOURCE_CONTROLLABLE_MEDIA`, above the native media settings, with the three vMix options: `Automatically play with transition` (on), `Automatically restart with transition` (off), `Automatically pause after transition` (on). `Defaults` restores exactly those values.
+- The values are stored in the source's **private settings** (`mixish_play_with_transition`, `mixish_restart_with_transition`, `mixish_pause_after_transition`), which OBS writes into the scene collection, so they survive restarts without touching the source's own settings and without a libobs change.
+- `MixishMediaOptionsFor()` reads them back in the switcher; `Restart playback when source becomes active` from OBS is irrelevant now because held sources never deactivate.
+- Verified with UI Automation (no cursor movement) on the `Media Input` tile: the dialog `Input 5 Media Input` shows the three checkboxes with the vMix defaults, `Automatically restart with transition` toggles On/Off, the dialog closes cleanly with `WM_CLOSE`, and after `Save` the scene collection holds `"private_settings": {"mixish_restart_with_transition": false}`. With the option On the fade restarted the clip (cursor 256 ms at +250 ms against a held 11392 ms); with it Off the same fade continued from the held frame. Screenshot: `G:\Mixish\screenshots\media-playback-options.png`.
+
+### Input tiles disappear again after Del deletes their source
+
+- `frontend/widgets/mixish/MixishSwitcher.hpp` / `.cpp` - `HookSceneItemSignals()` / `UnhookSceneItemSignals()`, `SceneItemRemoved()` and `ScheduleEmptyScenePrune()`. Deleting a source with Del removes its scene item through libobs rather than through OBS's scene-list code, so the auto-created input scene used to survive as an empty scene behind a stale tile. On `item_remove` Mixish defers a 250 ms check; if the scene has no items left it calls `obs_source_remove()` and `main->RemoveScene()`, which removes both the scene and its tile. Non-empty scenes, and scenes deleted by the user directly, are untouched.
+- Verified with UI Automation (no cursor movement) at 1366x768: creating a test scene and input showed a `Mixish Prune Test` tile (`IsOffscreen=False`, rect 1096,456,208,196); `RemoveInput` then produced log lines `Mixish: removing empty input scene 'Mixish Prune Test'` and `User Removed scene 'Mixish Prune Test'`, the scene disappeared from `GetSceneList` and the tile was gone. Screenshots: `fix-verify-10-tile-visible.png` (tile 6 is "Mixish Prune Test") and `fix-verify-11-tile-gone.png` (tile 6 is now "Color Input").
+
+### Playlist sits directly below Media in Add Input
+
+- `frontend/widgets/mixish/MixishAddInputController.cpp` - the synthetic Playlist entry is no longer appended to the end of the type list. It is inserted immediately after the native `ffmpeg_source` row, so the list reads `… Image, Image Slide Show, Media, Playlist, Text (GDI+), Timer …`. If the native Media row is missing the entry still falls back to a sane position instead of failing.
+- Verified in the Add Input dialog: `G:\Mixish\screenshots\add-input-order.png` shows Playlist directly after Media, with its icon and description.
+
+### Regression checks
+
+- Build clean (RelWithDebInfo x64, `obs-studio.vcxproj`) after the source-based media scan rewrite, the playback-options UI and the off-air parking rule.
+- 10x close test (launched with `--minimize-to-tray`, only `WM_CLOSE` sent, no mouse or keyboard automation): **10/10 clean exits, 0 new crash files**; the crash directory still holds only the pre-existing reports.
+- Test scaffolding was removed afterwards: obs-websocket restored to `server_enabled=false` / `auth_required=true`, the transition duration restored to 2000 ms, and no test scenes left in the collection.
+
+## Startup splash
+
+- `frontend/widgets/mixish/MixishSplash.hpp` / `.cpp` - new startup splash: 480x300 centered panel, `MIXISH` wordmark with the app icon, `LIVE PRODUCTION SWITCHER` tagline, indeterminate accent progress sweep, live status line and the version, all drawn from the tokens in `MIXISH_DESIGN_SYSTEM.md` (background `#1C1C1C`->`#141414`, border `#3A3A3A`, accent `#4C8DFF`). Implemented from scratch; no OBS dialog or third-party artwork is reused.
+- `frontend/widgets/mixish/MixishSplash.hpp` also exposes the single-instance `MixishSplashScreen::Show()`, `SetStatus()` and `Finish()` helpers.
+- `frontend/OBSApp.cpp` - `MixishSplashScreen::Show()` at the start of `OBSApp::OBSInit()`, a `SetStatus("Loading scenes and plugins...")` right before `new OBSBasic()`, and `Finish()` after `mainWindow->OBSInit()` returns, so the first thing on screen is Mixish instead of an empty desktop and the splash leaves as soon as the main window exists.
+- `frontend/cmake/ui-widgets.cmake` - registers the new splash sources.
+- Timing: minimum visible 1100 ms (a warm start can be ready in under a second), 220 ms fade-out with `QPropertyAnimation` on `windowOpacity`, then the widget deletes itself. There is deliberately **no fade-in**: OBS startup runs a long synchronous init immediately after the splash is shown, so an opacity animation never gets a chance to run and the splash stayed invisible; it now appears instantly at full opacity.
+- The window is `Qt::SplashScreen` (frameless, no taskbar entry) but **opaque**, with rounded corners from a widget mask. A translucent (`WA_TranslucentBackground`) window renders as nothing until its first paint reaches the screen, which is exactly what the blocking init delays; opaque windows fall back to their background instead of disappearing. It is not always-on-top, so OBS modal dialogs (safe-mode prompt, missing-files dialog) still appear above it.
+- Verified at 1366x768 with `--portable --multi`: first splash frame found 299 ms after launch at rect 442,218 (480x300, centered on the primary screen), the panel, wordmark, tagline, progress sweep, status and version all render; the main window appeared at +1908 ms and the splash was gone 2.5 s later. Screenshots: `G:\Mixish\screenshots\splash.png` (splash) and `G:\Mixish\screenshots\splash-main-window.png` (main window straight after it).
+- 10x close test on the splash build (launched with `--minimize-to-tray`, only `WM_CLOSE` sent): **10/10 clean exits, 0 new crash files**. The close test now looks for the `Mixish Studio` window title because the splash's own window is titled `Mixish`.
+
 ## Later tasks (not started)
 
 - Title input (templated text/lower-third, quick text edit) - effort medium; risk medium.
-- Playlist input - effort medium-high; risk medium.
 - Stream/SRT input as a direct option - effort medium-high; risk medium-high.
 - Video Delay as a visible input option - effort low-medium; risk low-medium.
 - NDI - effort high; license/plugin requirements need review.

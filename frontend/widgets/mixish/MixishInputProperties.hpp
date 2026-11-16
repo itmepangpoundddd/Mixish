@@ -24,7 +24,9 @@
 class OBSBasic;
 class OBSPropertiesView;
 class OBSQTDisplay;
+class QCheckBox;
 class QCloseEvent;
+class QGroupBox;
 class QLabel;
 class QListWidget;
 class QListWidgetItem;
@@ -76,6 +78,10 @@ private:
 
 	OBSPropertiesView *view = nullptr;
 	OBSQTDisplay *preview = nullptr;
+	QGroupBox *playbackGroup = nullptr;
+	QCheckBox *playWithTransitionBox = nullptr;
+	QCheckBox *restartWithTransitionBox = nullptr;
+	QCheckBox *pauseAfterTransitionBox = nullptr;
 	QListWidget *sectionList = nullptr;
 	QLabel *tabLabel = nullptr;
 	QLabel *titleLabel = nullptr;

@@ -408,6 +408,43 @@ QFrame#mixishAudioMixer QScrollArea {
 	background: transparent;
 	border: 0px;
 }
+QFrame#mixishPlaylistPanel {
+	background-color: #181818;
+	border-left: 1px solid #3A3A3A;
+}
+QComboBox#mixishPlaylistCombo {
+	padding-left: 8px;
+}
+QListWidget#mixishPlaylistList {
+	background-color: #121212;
+	color: #F1F1F1;
+	border: 1px solid #3A3A3A;
+	border-radius: 4px;
+	padding: 2px;
+	outline: 0px;
+}
+QListWidget#mixishPlaylistList::item {
+	color: #D8D8D8;
+	padding: 4px 6px;
+	border-radius: 3px;
+}
+QListWidget#mixishPlaylistList::item:selected {
+	background-color: #4C8DFF;
+	color: #0B1220;
+}
+QListWidget#mixishPlaylistList::item:hover:!selected {
+	background-color: #242424;
+	color: #FFFFFF;
+}
+QPushButton#mixishPlaylistAutoNext[mixishState="selected"] {
+	background-color: #1D9E75;
+	border-color: #1D9E75;
+	color: #F7F7F2;
+}
+QPushButton#mixishPlaylistAutoNext[mixishState="selected"]:hover {
+	background-color: #25B487;
+	border-color: #25B487;
+}
 QFrame#mixishMixerCard {
 	background-color: #202020;
 	border: 1px solid #3A3A3A;

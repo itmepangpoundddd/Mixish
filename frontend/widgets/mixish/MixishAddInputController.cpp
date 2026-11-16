@@ -16,6 +16,7 @@
 ******************************************************************************/
 
 #include "MixishAddInputController.hpp"
+#include "MixishPlaylistManager.hpp"
 #include "MixishSwitcher.hpp"
 #include "MixishTheme.hpp"
 
@@ -49,6 +50,7 @@
 static constexpr int kUnversionedIdRole = Qt::UserRole + 1;
 static constexpr int kRecentTypeLimit = 5;
 static constexpr int kRecentMediaLimit = 10;
+static constexpr const char *kPlaylistTypeId = "mixish_playlist";
 
 static QString RecentConfigString(const char *key)
 {
@@ -86,9 +88,11 @@ void MixishAddInputController::Setup()
 	HideObsOnlyControls();
 
 	/* The original dialog's New Source button and double-click both add to the
-	 * current scene. Replace those paths for the Mixish flow. */
+	 * current scene. Replace those paths for the Mixish flow. The native
+	 * source-type handler is also disconnected: the Playlist entry is a
+	 * Mixish type, not an OBS source type, so OBS must not look it up. */
 	QObject::disconnect(createButton, nullptr, dialog, nullptr);
-	QObject::disconnect(typeList, &QListWidget::itemDoubleClicked, dialog, nullptr);
+	QObject::disconnect(typeList, nullptr, dialog, nullptr);
 
 	connect(typeList, &QListWidget::currentItemChanged, this, &MixishAddInputController::OnTypeChanged);
 	connect(createButton, &QPushButton::clicked, this, &MixishAddInputController::CreateInput);
@@ -105,6 +109,7 @@ void MixishAddInputController::Setup()
 	}
 
 	RemoveUnsupportedTypeItems();
+	AddPlaylistTypeItem();
 
 	BuildRecentTypesRow();
 	BuildMediaPanel();
@@ -173,6 +178,44 @@ void MixishAddInputController::RemoveUnsupportedTypeItems()
 
 	if (firstValid)
 		typeList->setCurrentItem(firstValid);
+}
+
+void MixishAddInputController::AddPlaylistTypeItem()
+{
+	if (!typeList || FindTypeItem(QString::fromLatin1(kPlaylistTypeId)))
+		return;
+
+	/* Source icons come from the theme, not from the black qrc originals.
+	 * Without this the Playlist entry stayed black on the dark theme while
+	 * every native source icon was white. */
+	const QString iconPath = App()->IsThemeDark()
+					 ? QStringLiteral("theme:Dark/sources/playlist.svg")
+					 : QStringLiteral(":/res/images/sources/playlist.svg");
+	QIcon icon(iconPath);
+	if (icon.isNull())
+		icon = QIcon(QStringLiteral(":/res/images/sources/playlist.svg"));
+
+	auto *item = new QListWidgetItem(icon, tr("Playlist"));
+	item->setData(kUnversionedIdRole, QString::fromLatin1(kPlaylistTypeId));
+	item->setToolTip(tr("Play a queue of media files with automatic advance"));
+
+	/* Keep Mixish's Playlist type directly below the native Media source so
+	 * the two related input types stay together. */
+	int mediaRow = -1;
+	for (int i = 0; i < typeList->count(); ++i) {
+		QListWidgetItem *typeItem = typeList->item(i);
+		if (!typeItem)
+			continue;
+		if (typeItem->data(kUnversionedIdRole).toString() == QStringLiteral("ffmpeg_source")) {
+			mediaRow = i;
+			break;
+		}
+	}
+
+	if (mediaRow >= 0)
+		typeList->insertItem(mediaRow + 1, item);
+	else
+		typeList->addItem(item);
 }
 
 void MixishAddInputController::BuildRecentTypesRow()
@@ -512,6 +555,8 @@ QString MixishAddInputController::TypeDescription(const QString &type) const
 		return tr("Render text, titles, or lower-thirds with fonts and effects.");
 	if (type == QStringLiteral("mixish_timer"))
 		return tr("Show a realtime clock, countdown, or stopwatch. Configure the mode, font, colors, outline and canvas size in Properties.");
+	if (type == QString::fromLatin1(kPlaylistTypeId))
+		return tr("Play a queue of video or audio files. Create Input opens a multi-file picker; the Program transport controls playback and advances through the queue.");
 	if (type == QStringLiteral("ffmpeg_source"))
 		return tr("Play a video or audio file. Recent files and Browse are available on the right.");
 	if (type == QStringLiteral("vlc_source"))
@@ -568,6 +613,11 @@ void MixishAddInputController::CreateInput()
 	if (type.isEmpty() || type == QStringLiteral("scene"))
 		return;
 
+	if (type == QString::fromLatin1(kPlaylistTypeId)) {
+		CreatePlaylistInput();
+		return;
+	}
+
 	QListWidgetItem *typeItem = FindTypeItem(type);
 	if (!typeItem)
 		return;
@@ -618,6 +668,35 @@ void MixishAddInputController::CreateInput()
 		AddRecentMedia(selectedMediaFile);
 
 	switcher->OpenInputProperties(scene, number);
+	dialog->close();
+}
+
+void MixishAddInputController::CreatePlaylistInput()
+{
+	MixishPlaylistManager *manager = switcher ? switcher->GetPlaylistManager() : nullptr;
+	if (!manager) {
+		QMessageBox::warning(dialog, tr("Add Input"), tr("The playlist manager is not available."));
+		return;
+	}
+
+	const QStringList files = QFileDialog::getOpenFileNames(
+		dialog, tr("Select Playlist Files"), QString(),
+		tr("Media and Playlist Files (*.mp4 *.mkv *.mov *.avi *.webm *.flv *.ts *.m4v *.mp3 *.wav *.flac *.ogg *.m4a *.aac *.m3u *.m3u8);;All Files (*)"));
+	if (files.isEmpty())
+		return;
+
+	const int number = numberSpin ? numberSpin->value() : 0;
+	MixishPlaylistController *controller = manager->CreatePlaylist(files, number);
+	if (!controller) {
+		QMessageBox::warning(dialog, tr("Add Input"),
+				     tr("Unable to create the playlist. Check that at least one selected file exists."));
+		return;
+	}
+
+	AddRecentType(QString::fromLatin1(kPlaylistTypeId));
+	for (const QString &file : files)
+		AddRecentMedia(file);
+
 	dialog->close();
 }
 

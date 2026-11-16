@@ -6,7 +6,7 @@ Mixish turns OBS Studio into a hardware-style switcher: Preview/Program monitors
 scene tiles, a transition column, four overlay channels and a docked audio mixer,
 while keeping the OBS engine (scenes, sources, transitions, encoding) underneath.
 
-> **Status:** early development (`0.0.1`). Expect rough edges; not yet recommended
+> **Status:** early development (`0.0.2`). Expect rough edges; not yet recommended
 > for unattended live production.
 
 ## Features
@@ -33,7 +33,16 @@ while keeping the OBS engine (scenes, sources, transitions, encoding) underneath
   Start/Pause/Reset and optional auto-start. Font, text/outline/background
   colors and canvas size are configurable, with a transparent background by
   default.
+- **Playlist input** backed by a native OBS media source. Create a queue from
+  multiple files or an M3U/M3U8 list, then open the **Playlist** tab next to
+  Audio Mixer to see the queue. The tab opens automatically when a Playlist
+  input is selected and provides Add/Edit/Remove, Play Out, Auto Next,
+  Auto First and Loop. Missing files are skipped, the last frame is held at
+  the end, durations come from `#EXTINF` or a background native probe, and the
+  queue/current item/durations persist with the scene collection.
 - **Media transport** for the selected input (seek, play/pause, restart, previous/next).
+  The same reusable transport widget also appears below Program for the
+  active Playlist.
 - **Input Properties** dialog with a dark OBS property form and a large live preview.
 - **Recording / Streaming settings** dialogs modeled after a hardware switcher.
 - **One design system**: a single `mixish.qss` stylesheet with semantic colors,
@@ -97,6 +106,12 @@ The build product is not committed; attach installers to GitHub Releases.
 - The installer is not code-signed, so Windows SmartScreen may show
   "Unknown publisher".
 - Application data uses OBS's `%APPDATA%\obs-studio` folder.
+- Playlist switching is not gapless yet: the v1 player replaces the file in one
+  media source and measured 1.9–19.4 ms end-to-start gaps on the test machine.
+  Dual-source preloading is planned for v2.
+- `.m3u`/`.m3u8` files are read as Mixish queue lists (`#EXTINF` titles and
+  durations). A true HLS playlist is currently expanded into its segment
+  entries rather than handed to the media source as one stream.
 
 ## License
 

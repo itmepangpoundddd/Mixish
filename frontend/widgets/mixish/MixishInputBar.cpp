@@ -18,6 +18,9 @@
 #include "MixishInputBar.hpp"
 #include "MixishAudioMixer.hpp"
 #include "MixishInputTile.hpp"
+#include "MixishPlaylistController.hpp"
+#include "MixishPlaylistManager.hpp"
+#include "MixishPlaylistPanel.hpp"
 #include "MixishSwitcher.hpp"
 #include "MixishTheme.hpp"
 #include "MixishVideoControls.hpp"
@@ -71,6 +74,16 @@ MixishInputBar::MixishInputBar(MixishSwitcher *switcher_, OBSBasic *main_, QWidg
 	videoControls = new MixishVideoControls(switcher, this);
 	headerRow->addWidget(videoControls, 1);
 
+	playlistToggle = new QPushButton(tr("Playlist"), this);
+	playlistToggle->setObjectName(QStringLiteral("mixishPlaylistToggle"));
+	MixishTheme::SetVariant(playlistToggle, "secondary");
+	playlistToggle->setCheckable(true);
+	playlistToggle->setFixedHeight(MixishTheme::IconButtonSize);
+	playlistToggle->setFocusPolicy(Qt::NoFocus);
+	playlistToggle->setToolTip(tr("Show or hide the selected playlist's queue"));
+	playlistToggle->setEnabled(false);
+	headerRow->addWidget(playlistToggle);
+
 	mixerToggle = new QPushButton(tr("Audio Mixer"), this);
 	mixerToggle->setObjectName(QStringLiteral("mixishMixerToggle"));
 	MixishTheme::SetVariant(mixerToggle, "secondary");
@@ -82,11 +95,10 @@ MixishInputBar::MixishInputBar(MixishSwitcher *switcher_, OBSBasic *main_, QWidg
 
 	outer->addLayout(headerRow);
 
-	auto *contentSplitter = new QSplitter(Qt::Horizontal, this);
+	contentSplitter = new QSplitter(Qt::Horizontal, this);
 	contentSplitter->setObjectName(QStringLiteral("mixishInputSplitter"));
 	contentSplitter->setChildrenCollapsible(false);
 	contentSplitter->setHandleWidth(4);
-
 	scrollArea = new QScrollArea(contentSplitter);
 	scrollArea->setObjectName(QStringLiteral("mixishTileScroll"));
 	scrollArea->setFrameShape(QFrame::NoFrame);
@@ -105,14 +117,22 @@ MixishInputBar::MixishInputBar(MixishSwitcher *switcher_, OBSBasic *main_, QWidg
 
 	audioMixer = new MixishAudioMixer(switcher, contentSplitter);
 	contentSplitter->addWidget(audioMixer);
+
+	playlistPanel = new MixishPlaylistPanel(switcher, contentSplitter);
+	playlistPanel->hide();
+	contentSplitter->addWidget(playlistPanel);
+
 	contentSplitter->setStretchFactor(0, 1);
-	contentSplitter->setSizes({1000, 320});
+	contentSplitter->setSizes({1000, 0, 0});
 	contentSplitter->setStretchFactor(1, 0);
+	contentSplitter->setStretchFactor(2, 0);
 
 	outer->addWidget(contentSplitter, 1);
 
 	connect(mixerToggle, &QPushButton::toggled, this,
 		[this](bool checked) { SetMixerVisible(checked); });
+	connect(playlistToggle, &QPushButton::toggled, this,
+		[this](bool checked) { SetPlaylistVisible(checked); });
 
 	{
 		const bool visible = config_get_bool(App()->GetUserConfig(), "Mixish", "ShowAudioMixer");
@@ -168,16 +188,78 @@ void MixishInputBar::ScheduleRebuild()
 
 void MixishInputBar::SetMixerVisible(bool visible)
 {
+	if (visible) {
+		mixerRestoreOnPlaylistExit = false;
+		ShowPanel(InputPanelMode::Mixer);
+	} else {
+		ShowPanel(InputPanelMode::None);
+	}
+
+	config_set_bool(App()->GetUserConfig(), "Mixish", "ShowAudioMixer", visible);
+}
+
+void MixishInputBar::SetPlaylistVisible(bool visible)
+{
+	if (visible) {
+		if (!playlistToggle || !playlistToggle->isEnabled()) {
+			if (playlistToggle) {
+				QSignalBlocker block(playlistToggle);
+				playlistToggle->setChecked(false);
+			}
+			return;
+		}
+
+		if (panelMode == InputPanelMode::Mixer)
+			mixerRestoreOnPlaylistExit = true;
+		if (playlistPanel)
+			playlistPanel->SetController(panelController);
+		ShowPanel(InputPanelMode::Playlist);
+	} else if (panelMode == InputPanelMode::Playlist) {
+		ShowPanel(InputPanelMode::None);
+		mixerRestoreOnPlaylistExit = false;
+	}
+}
+
+void MixishInputBar::ShowPanel(InputPanelMode mode)
+{
+	const bool changed = panelMode != mode;
+	panelMode = mode;
+
 	if (audioMixer) {
-		audioMixer->setVisible(visible);
-		if (visible)
+		audioMixer->setVisible(mode == InputPanelMode::Mixer);
+		if (mode == InputPanelMode::Mixer)
 			audioMixer->Refresh();
 	}
 
-	if (mixerToggle)
-		MixishTheme::SetState(mixerToggle, visible ? "selected" : "idle");
+	if (playlistPanel) {
+		playlistPanel->setVisible(mode == InputPanelMode::Playlist);
+		if (mode == InputPanelMode::Playlist)
+			playlistPanel->Refresh();
+	}
 
-	config_set_bool(App()->GetUserConfig(), "Mixish", "ShowAudioMixer", visible);
+	if (mixerToggle) {
+		QSignalBlocker block(mixerToggle);
+		mixerToggle->setChecked(mode == InputPanelMode::Mixer);
+		MixishTheme::SetState(mixerToggle,
+				      mode == InputPanelMode::Mixer ? "selected" : "idle");
+	}
+
+	if (playlistToggle) {
+		QSignalBlocker block(playlistToggle);
+		playlistToggle->setEnabled(panelController != nullptr);
+		playlistToggle->setChecked(mode == InputPanelMode::Playlist);
+		MixishTheme::SetState(playlistToggle,
+				      mode == InputPanelMode::Playlist ? "selected" : "idle");
+	}
+
+	if (changed && mode != InputPanelMode::None && contentSplitter) {
+		if (mode == InputPanelMode::Mixer)
+			contentSplitter->setSizes(QList<int>({1000, 320, 0}));
+		else
+			contentSplitter->setSizes(QList<int>({1000, 0, 440}));
+	} else if (changed && mode == InputPanelMode::None && contentSplitter) {
+		contentSplitter->setSizes(QList<int>({1000, 0, 0}));
+	}
 }
 
 void MixishInputBar::RefreshAudioMixer()
@@ -186,27 +268,73 @@ void MixishInputBar::RefreshAudioMixer()
 		audioMixer->Refresh();
 }
 
+MixishInputTile *MixishInputBar::SelectionTile() const
+{
+	if (selectedTile && selectedTile->Scene())
+		return selectedTile;
+
+	/* No manual selection yet: follow the Preview tile. */
+	OBSSource preview = main->GetCurrentSceneSource();
+	for (MixishInputTile *candidate : tiles) {
+		if (!candidate)
+			continue;
+		OBSScene scene = candidate->Scene();
+		if (scene && obs_scene_get_source(scene) == preview)
+			return candidate;
+	}
+
+	return nullptr;
+}
+
+MixishVideoControls *MixishInputBar::VideoControls() const
+{
+	return videoControls;
+}
+
 void MixishInputBar::UpdateVideoControls()
 {
 	if (!videoControls)
 		return;
 
-	MixishInputTile *tile = selectedTile;
-	if (!tile || !tile->Scene()) {
-		/* No manual selection yet: follow the Preview tile. */
-		OBSSource preview = main->GetCurrentSceneSource();
-		for (MixishInputTile *candidate : tiles) {
-			if (!candidate)
-				continue;
-			OBSScene scene = candidate->Scene();
-			if (scene && obs_scene_get_source(scene) == preview) {
-				tile = candidate;
-				break;
-			}
-		}
+	MixishInputTile *tile = SelectionTile();
+	videoControls->SetScene(tile ? tile->Scene() : OBSScene());
+	UpdatePlaylistPanel();
+}
+
+void MixishInputBar::UpdatePlaylistPanel()
+{
+	if (!playlistToggle)
+		return;
+
+	MixishPlaylistController *controller = nullptr;
+	MixishInputTile *tile = SelectionTile();
+	if (tile && tile->Scene()) {
+		MixishPlaylistManager *manager = switcher ? switcher->GetPlaylistManager() : nullptr;
+		if (manager)
+			controller = manager->FindByScene(obs_scene_get_source(tile->Scene()));
 	}
 
-	videoControls->SetScene(tile ? tile->Scene() : OBSScene());
+	const bool hasController = controller != nullptr;
+	playlistToggle->setEnabled(hasController);
+
+	if (controller != panelController) {
+		panelController = controller;
+		if (playlistPanel)
+			playlistPanel->SetController(controller);
+
+		if (hasController) {
+			if (panelMode != InputPanelMode::Playlist) {
+				mixerRestoreOnPlaylistExit = (panelMode == InputPanelMode::Mixer);
+				ShowPanel(InputPanelMode::Playlist);
+			}
+		} else if (panelMode == InputPanelMode::Playlist) {
+			ShowPanel(mixerRestoreOnPlaylistExit ? InputPanelMode::Mixer
+							     : InputPanelMode::None);
+			mixerRestoreOnPlaylistExit = false;
+		}
+	} else if (!hasController && panelMode == InputPanelMode::Playlist) {
+		ShowPanel(InputPanelMode::None);
+	}
 }
 
 void MixishInputBar::ClearTiles()
@@ -234,6 +362,18 @@ void MixishInputBar::PrepareForSceneCollectionChange()
 		thumbnailTimer->stop();
 
 	thumbnailIndex = 0;
+
+	if (playlistPanel)
+		playlistPanel->SetController(nullptr);
+	panelController = nullptr;
+	if (playlistToggle) {
+		QSignalBlocker block(playlistToggle);
+		playlistToggle->setChecked(false);
+		playlistToggle->setEnabled(false);
+	}
+	if (panelMode == InputPanelMode::Playlist)
+		ShowPanel(InputPanelMode::None);
+	mixerRestoreOnPlaylistExit = false;
 
 	ClearTiles();
 }
@@ -319,6 +459,15 @@ void MixishInputBar::SelectTile(MixishInputTile *tile)
 	UpdateVideoControls();
 	switcher->SelectScene(tile->Scene());
 	UpdateStates();
+
+	/* Selecting a Playlist input always brings its queue tab forward. */
+	if (panelController) {
+		if (playlistPanel)
+			playlistPanel->SetController(panelController);
+		if (panelMode == InputPanelMode::Mixer)
+			mixerRestoreOnPlaylistExit = true;
+		ShowPanel(InputPanelMode::Playlist);
+	}
 }
 
 void MixishInputBar::CutTile(MixishInputTile *tile)

@@ -31,8 +31,13 @@
 
 #include <QObject>
 #include <QPointer>
+#include <QSet>
 #include <QStringList>
+#include <QVector>
 
+class MixishPlaylistController;
+class MixishPlaylistManager;
+class MixishProgramTransport;
 class OBSBasic;
 class QAction;
 class QActionGroup;
@@ -92,7 +97,7 @@ public:
 	void OpenSceneMenu(OBSScene scene, QWidget *anchor);
 	void OpenInputProperties(OBSScene scene, int number = 0);
 	void RefreshSceneTiles();
-	OBSScene CreateInputScene(OBSSource source, int number = 0);
+	OBSScene CreateInputScene(OBSSource source, int number = 0, const QString &sceneName = QString());
 	OBSBasic *GetMain() const { return main; }
 
 	/* Overlay channels. */
@@ -102,6 +107,7 @@ public:
 
 	MixishTransitionPanel *GetTransitionPanel() const { return transitionPanel; }
 	MixishInputBar *GetInputBar() const { return inputBar; }
+	MixishPlaylistManager *GetPlaylistManager() const;
 
 signals:
 	void OverlaysChanged();
@@ -125,6 +131,48 @@ private:
 	void ApplyDockState();
 	void SaveSplitterState();
 	void RestoreSplitterState();
+	void EnsureProgramTransport();
+	void UpdateProgramTransport();
+
+	/* Mixish input lifecycle.
+	 *
+	 * Input tiles are scenes, so deleting an input's source leaves an empty
+	 * scene behind. Watch each scene's item_remove signal and drop the scene
+	 * (and therefore the tile) once its last item is gone. */
+	void HookSceneItemSignals();
+	void UnhookSceneItemSignals();
+	void ScheduleEmptyScenePrune(obs_source_t *sceneSource);
+	static void SceneItemRemoved(void *data, calldata_t *params);
+
+	/* Keep media inputs alive across transitions.
+	 *
+	 * A media source that leaves Program is normally deactivated, which
+	 * stops playback and clears its frame, so the next Fade starts from
+	 * black. Mixish holds one activation reference on every media input,
+	 * plays it when a transition brings it on air, and only pauses it once
+	 * the transition that took it off air has finished. */
+	void UpdateMediaActivity();
+	void PrimeMediaForTransition(OBSSource destination);
+	void MarkUserPlayback(obs_source_t *source);
+	void ReleaseMediaHolds();
+
+	struct MediaHold {
+		OBSWeakSource source;
+		bool pausedByUs = false;
+		bool wasOnAir = false;
+		/* The user pressed play on a transport. Automatic parking must
+		 * not fight an intentional play. */
+		bool userStarted = false;
+		/* The initial autoplay of a fresh source has been parked. Later
+		 * playback (hotkey, websocket, transport) is left alone. */
+		bool autoParked = false;
+	};
+
+	QVector<MediaHold> mediaHolds;
+	bool transitionWasActive = false;
+	int lastTBarValue = 0;
+	QVector<OBSWeakSource> hookedScenes;
+	QSet<QString> hookedSceneUuids;
 
 	static void FrontendEvent(enum obs_frontend_event event, void *data);
 
@@ -146,6 +194,9 @@ private:
 	QPointer<MixishBottomBar> bottomBar;
 	QPointer<MixishOverlayController> overlayController;
 	QPointer<MixishOverlayPanel> overlayPanel;
+	QPointer<MixishPlaylistManager> playlistManager;
+	QPointer<MixishProgramTransport> programTransport;
+	QPointer<MixishPlaylistController> programPlaylist;
 	QPointer<MixishTransitionPanel> transitionPanel;
 	QPointer<MixishInputBar> inputBar;
 	QPointer<MixishInputProperties> inputProperties;

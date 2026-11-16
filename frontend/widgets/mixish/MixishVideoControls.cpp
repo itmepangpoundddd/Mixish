@@ -16,17 +16,11 @@
 ******************************************************************************/
 
 #include "MixishVideoControls.hpp"
+#include "MixishMediaTransport.hpp"
 #include "MixishSwitcher.hpp"
 #include "MixishTheme.hpp"
 
-#include <OBSApp.hpp>
-#include <components/MediaControls.hpp>
-#include <util/config-file.h>
-
 #include <QHBoxLayout>
-#include <QLabel>
-#include <QSlider>
-#include <QSizePolicy>
 
 #include "moc_MixishVideoControls.cpp"
 
@@ -79,53 +73,25 @@ MixishVideoControls::MixishVideoControls(MixishSwitcher *switcher_, QWidget *par
 
 	auto *layout = new QHBoxLayout(this);
 	layout->setContentsMargins(0, 0, 0, 0);
-	layout->setSpacing(MixishTheme::Space1);
+	layout->setSpacing(0);
 
-	controls = new MediaControls(this);
-	controls->setObjectName(QStringLiteral("mixishTransport"));
-	controls->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-	controls->setMinimumWidth(340);
-	layout->addWidget(controls, 1);
+	transport = new MixishMediaTransport(this);
+	transport->SetPlaceholder(tr("Select an input"));
+	layout->addWidget(transport, 1);
 
-	/* The Mixish transport shows total duration, not the OBS default
-	 * countdown. This only flips the shared preference once. */
-	if (config_get_bool(App()->GetUserConfig(), "BasicWindow",
-			    "MediaControlsCountdownTimer"))
-		QMetaObject::invokeMethod(controls, "on_durationLabel_clicked",
-					  Qt::DirectConnection);
-
-	/* MediaControls puts its seek slider next to an expanding spacer, which
-	 * leaves the slider without room in a normal widget. Give it the space. */
-	QSlider *seek = controls->findChild<QSlider *>(QStringLiteral("slider"));
-	if (seek) {
-		seek->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-		seek->setMinimumWidth(150);
-	}
-
-	if (auto *inner = controls->findChild<QHBoxLayout *>(QStringLiteral("horizontalLayout"))) {
-		for (int i = 0; i < inner->count(); ++i) {
-			if (seek && inner->itemAt(i)->widget() == seek)
-				inner->setStretch(i, 1);
-		}
-	}
-
-	placeholder = new QLabel(tr("Select an input"), this);
-	MixishTheme::SetRole(placeholder, "muted");
-	placeholder->setVisible(false);
-	layout->addWidget(placeholder);
-
-	layout->addStretch(1);
-
-	controls->SetSource(nullptr);
-	controls->hide();
-	placeholder->show();
+	SetScene(OBSScene());
 
 	MixishTheme::Apply(this);
 }
 
+MixishMediaTransport *MixishVideoControls::Transport() const
+{
+	return transport;
+}
+
 void MixishVideoControls::SetScene(OBSScene scene)
 {
-	if (!controls)
+	if (!transport)
 		return;
 
 	obs_source_t *media = nullptr;
@@ -136,27 +102,17 @@ void MixishVideoControls::SetScene(OBSScene scene)
 	}
 
 	if (media) {
-		controls->SetSource(OBSSource(media));
-		controls->setEnabled(true);
-		controls->show();
-		placeholder->hide();
-		return;
-	}
-
-	controls->SetSource(nullptr);
-	controls->setEnabled(false);
-
-	if (scene) {
-		/* Non-media input: keep the transport visible but greyed out. */
-		controls->show();
-		placeholder->hide();
+		transport->SetSource(media, true);
+	} else if (scene) {
+		/* Non-media input: keep the transport visible but disabled. */
+		transport->SetSource(nullptr, true);
 	} else {
-		controls->hide();
-		placeholder->show();
+		transport->SetPlaceholder(tr("Select an input"));
+		transport->SetSource(nullptr, false);
 	}
 }
 
 bool MixishVideoControls::HasMedia() const
 {
-	return controls && controls->isVisible() && controls->isEnabled();
+	return transport && transport->HasSource();
 }

@@ -50,6 +50,7 @@ private slots:
 private:
 	void HideObsOnlyControls();
 	void RemoveUnsupportedTypeItems();
+	void AddPlaylistTypeItem();
 	void BuildRecentTypesRow();
 	void BuildMediaPanel();
 	void BuildTypeInfoPanel();
@@ -64,6 +65,7 @@ private:
 	void SaveRecentMedia();
 	void AddRecentType(const QString &type);
 	void AddRecentMedia(const QString &path);
+	void CreatePlaylistInput();
 
 	QString SelectedTypeId() const;
 	bool IsMediaType(const QString &type) const;

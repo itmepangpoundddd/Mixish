@@ -21,8 +21,13 @@
 #include "MixishSwitcher.hpp"
 #include "MixishTheme.hpp"
 #include "MixishInputTile.hpp"
+#include "MixishPlaylistController.hpp"
+#include "MixishPlaylistManager.hpp"
+#include "MixishMediaTransport.hpp"
+#include "MixishProgramTransport.hpp"
 #include "MixishTopBar.hpp"
 #include "MixishTransitionPanel.hpp"
+#include "MixishVideoControls.hpp"
 
 #include <dialogs/OBSBasicSourceSelect.hpp>
 #include <widgets/OBSBasic.hpp>
@@ -65,6 +70,8 @@ MixishSwitcher::MixishSwitcher(OBSBasic *main_) : QObject(main_), main(main_)
 	connect(overlayController, &MixishOverlayController::ChannelsChanged, this,
 		&MixishSwitcher::OverlaysChanged);
 
+	playlistManager = new MixishPlaylistManager(this, main);
+
 	CreatePlaceholders();
 
 	topBar = new MixishTopBar(this, main, main);
@@ -97,6 +104,17 @@ MixishSwitcher::MixishSwitcher(OBSBasic *main_) : QObject(main_), main(main_)
 MixishSwitcher::~MixishSwitcher()
 {
 	obs_frontend_remove_event_callback(&MixishSwitcher::FrontendEvent, this);
+
+	ReleaseMediaHolds();
+	UnhookSceneItemSignals();
+
+	if (playlistManager)
+		playlistManager->PrepareForShutdown();
+}
+
+MixishPlaylistManager *MixishSwitcher::GetPlaylistManager() const
+{
+	return playlistManager;
 }
 
 void MixishSwitcher::FrontendEvent(enum obs_frontend_event event, void *data)
@@ -148,8 +166,20 @@ void MixishSwitcher::FrontendEvent(enum obs_frontend_event event, void *data)
 
 void MixishSwitcher::PrepareForShutdown()
 {
+	ReleaseMediaHolds();
+	UnhookSceneItemSignals();
+
 	/* Drop tile references and tear the overlay stages down while libobs is
 	 * still fully alive. ClearSceneData runs right after this event. */
+	if (programTransport) {
+		programTransport->SetSource(nullptr);
+		programTransport->SetQueueInfo(QString());
+	}
+	programPlaylist = nullptr;
+
+	if (playlistManager)
+		playlistManager->PrepareForShutdown();
+
 	if (inputBar)
 		inputBar->PrepareForSceneCollectionChange();
 	if (overlayController)
@@ -161,6 +191,18 @@ void MixishSwitcher::PrepareForShutdown()
 
 void MixishSwitcher::PrepareForSceneCollectionChange()
 {
+	ReleaseMediaHolds();
+	UnhookSceneItemSignals();
+
+	if (programTransport) {
+		programTransport->SetSource(nullptr);
+		programTransport->SetQueueInfo(QString());
+	}
+	programPlaylist = nullptr;
+
+	if (playlistManager)
+		playlistManager->PrepareForSceneCollectionChange();
+
 	if (inputBar)
 		inputBar->PrepareForSceneCollectionChange();
 	if (overlayController)
@@ -173,6 +215,8 @@ void MixishSwitcher::OnSceneCollectionLoaded()
 		overlayController->OnSceneCollectionLoaded();
 	if (inputBar)
 		inputBar->OnSceneCollectionLoaded();
+	if (playlistManager)
+		playlistManager->OnSceneCollectionLoaded();
 
 	RefreshOverlayUI();
 }
@@ -207,6 +251,12 @@ void MixishSwitcher::CreatePlaceholders()
 
 	inputBar = new MixishInputBar(this, main, main->ui->centralwidget);
 	inputBar->setMinimumHeight(248);
+
+	if (MixishVideoControls *video = inputBar->VideoControls()) {
+		if (video->Transport())
+			connect(video->Transport(), &MixishMediaTransport::playRequested, this,
+				&MixishSwitcher::MarkUserPlayback);
+	}
 
 	/* Vertical splitter so the user can resize the monitor area against the
 	 * input tile row, like a hardware switcher panel. */
@@ -301,6 +351,8 @@ void MixishSwitcher::Sync()
 	if (overlayController)
 		overlayController->Sync();
 
+	UpdateMediaActivity();
+
 	if (!mixishMode)
 		return;
 
@@ -313,6 +365,15 @@ void MixishSwitcher::Sync()
 
 	if (main->programWidget)
 		SetTransitionColumnVisible(true);
+
+	EnsureProgramTransport();
+	UpdateProgramTransport();
+
+	if (playlistManager) {
+		OBSSource previewSource = main->GetCurrentSceneSource();
+		OBSSource programSource = main->GetProgramSource();
+		playlistManager->UpdateVisibility(previewSource.Get(), programSource.Get());
+	}
 
 	if (inputBar)
 		inputBar->UpdateStates();
@@ -358,6 +419,9 @@ void MixishSwitcher::SetMixishLayout(bool enabled, bool persist)
 
 		SetTransitionColumnVisible(true);
 		SetInputBarVisible(true);
+		EnsureProgramTransport();
+		if (programTransport)
+			programTransport->show();
 		if (bottomBar)
 			bottomBar->show();
 		if (mainSplitter)
@@ -375,6 +439,8 @@ void MixishSwitcher::SetMixishLayout(bool enabled, bool persist)
 
 		SetTransitionColumnVisible(false);
 		SetInputBarVisible(false);
+		if (programTransport)
+			programTransport->hide();
 		if (dockStateCaptured)
 			ApplyDockState();
 		ClearHeaderOverrides();
@@ -395,6 +461,71 @@ void MixishSwitcher::SetMixishLayout(bool enabled, bool persist)
 		config_set_bool(App()->GetUserConfig(), "BasicWindow", "MixishLayout", mixishMode);
 		config_save_safe(App()->GetUserConfig(), "tmp", nullptr);
 	}
+}
+
+void MixishSwitcher::EnsureProgramTransport()
+{
+	if (programTransport || !main->programWidget || !main->programLayout)
+		return;
+
+	/* The transport is a child of programWidget, which OBS deletes when
+	 * Studio Mode is disabled. Recreate it with the next Program widget. */
+	programPlaylist = nullptr;
+
+	auto *transport = new MixishProgramTransport(main->programWidget);
+	programTransport = transport;
+	main->programLayout->addWidget(transport);
+
+	connect(transport, &MixishProgramTransport::previousRequested, this, [this]() {
+		if (programPlaylist)
+			programPlaylist->PlayPrevious();
+	});
+	connect(transport, &MixishProgramTransport::nextRequested, this, [this]() {
+		if (programPlaylist)
+			programPlaylist->PlayNext();
+	});
+
+	if (transport->Transport())
+		connect(transport->Transport(), &MixishMediaTransport::playRequested, this,
+			&MixishSwitcher::MarkUserPlayback);
+
+	if (!mixishMode)
+		transport->hide();
+}
+
+void MixishSwitcher::UpdateProgramTransport()
+{
+	if (!programTransport || !mixishMode)
+		return;
+
+	OBSSource programSource = main->GetProgramSource();
+	MixishPlaylistController *controller =
+		(playlistManager && programSource) ? playlistManager->FindByScene(programSource.Get())
+						   : nullptr;
+
+	if (controller != programPlaylist ||
+	    (controller && !programTransport->HasSource())) {
+		programPlaylist = controller;
+		programTransport->SetSource(controller ? controller->MediaSource() : nullptr);
+	}
+
+	if (!controller) {
+		programTransport->SetQueueInfo(QString());
+		return;
+	}
+
+	const int index = controller->CurrentIndex();
+	const int count = controller->Items().size();
+	QString info = tr("%1  ·  %2/%3")
+			       .arg(QString::fromUtf8(obs_source_get_name(programSource.Get())))
+			       .arg(index >= 0 ? index + 1 : 0)
+			       .arg(count);
+
+	const QString next = controller->NextUpName();
+	if (!next.isEmpty())
+		info += tr("  ·  Next: %1").arg(next);
+
+	programTransport->SetQueueInfo(info);
 }
 
 void MixishSwitcher::SetTransitionColumnVisible(bool visible)
@@ -613,6 +744,7 @@ void MixishSwitcher::TriggerTransition(const QString &uuid)
 		return;
 
 	main->SetCurrentTransition(uuid);
+	PrimeMediaForTransition(main->GetCurrentSceneSource());
 	main->TransitionClicked();
 }
 
@@ -629,6 +761,8 @@ void MixishSwitcher::CutToProgram(OBSScene scene)
 	OBSSource source = obs_scene_get_source(scene);
 	if (!source)
 		return;
+
+	PrimeMediaForTransition(source);
 
 	if (main->IsPreviewProgramMode()) {
 		if (main->GetCurrentTransition() != main->cutTransition) {
@@ -675,6 +809,10 @@ void MixishSwitcher::SetTBarPosition(int value)
 {
 	if (!main->tBar)
 		return;
+
+	if (value > 0 && lastTBarValue == 0)
+		PrimeMediaForTransition(main->GetCurrentSceneSource());
+	lastTBarValue = value;
 
 	{
 		QSignalBlocker block(main->tBar);
@@ -1011,15 +1149,17 @@ static std::string MixishUniqueSourceName(const std::string &base)
 	return candidate;
 }
 
-OBSScene MixishSwitcher::CreateInputScene(OBSSource source, int number)
+OBSScene MixishSwitcher::CreateInputScene(OBSSource source, int number, const QString &sceneName)
 {
 	if (!source)
 		return nullptr;
 
-	const std::string baseName = std::string(obs_source_get_name(source));
-	const std::string sceneName = MixishUniqueSourceName(baseName);
+	const std::string baseName = sceneName.isEmpty()
+					     ? std::string(obs_source_get_name(source))
+					     : sceneName.toStdString();
+	const std::string uniqueSceneName = MixishUniqueSourceName(baseName);
 
-	OBSSceneAutoRelease scene = obs_scene_create(sceneName.c_str());
+	OBSSceneAutoRelease scene = obs_scene_create(uniqueSceneName.c_str());
 	if (!scene)
 		return nullptr;
 
@@ -1045,7 +1185,7 @@ OBSScene MixishSwitcher::CreateInputScene(OBSSource source, int number)
 	if (!alreadyListed) {
 		main->AddScene(OBSSource(sceneSource));
 	} else {
-		blog(LOG_WARNING, "Mixish: scene '%s' is already in the scene list", sceneName.c_str());
+		blog(LOG_WARNING, "Mixish: scene '%s' is already in the scene list", uniqueSceneName.c_str());
 	}
 
 	if (number >= 1 && number <= 9) {
@@ -1074,6 +1214,506 @@ OBSScene MixishSwitcher::CreateInputScene(OBSSource source, int number)
 	RefreshSceneTiles();
 
 	return OBSScene(scene.Get());
+}
+
+namespace {
+
+/* Studio Mode can run a private duplicate of a scene, so the source in the
+ * Preview/Program/transition slot is not necessarily the scene source that
+ * appears in the scene list. Collect the media sources themselves instead of
+ * matching scenes, which works for duplicates, groups and nested scenes. */
+struct MixishAirMediaScan {
+	MixishPlaylistManager *playlists = nullptr;
+	QSet<obs_source_t *> *media = nullptr;
+	int depth = 0;
+};
+
+void MixishCollectAirMedia(obs_scene_t *scene, MixishAirMediaScan *scan);
+
+bool MixishCollectAirMediaItem(obs_scene_t *, obs_sceneitem_t *item, void *param)
+{
+	auto *scan = static_cast<MixishAirMediaScan *>(param);
+	obs_source_t *source = item ? obs_sceneitem_get_source(item) : nullptr;
+	if (!source || scan->depth > 32)
+		return true;
+
+	if (obs_sceneitem_is_group(item)) {
+		if (obs_scene_t *group = obs_group_from_source(source))
+			MixishCollectAirMedia(group, scan);
+		return true;
+	}
+
+	if (obs_scene_t *nested = obs_scene_from_source(source)) {
+		MixishCollectAirMedia(nested, scan);
+		return true;
+	}
+
+	/* Playlist media has its own controller and must keep its own
+	 * activation/showing lifecycle. */
+	if (scan->playlists && scan->playlists->IsPlaylistSource(source))
+		return true;
+
+	if (obs_source_get_output_flags(source) & OBS_SOURCE_CONTROLLABLE_MEDIA)
+		scan->media->insert(source);
+
+	return true;
+}
+
+void MixishCollectAirMedia(obs_scene_t *scene, MixishAirMediaScan *scan)
+{
+	if (!scene || !scan)
+		return;
+
+	++scan->depth;
+	obs_scene_enum_items(scene, MixishCollectAirMediaItem, scan);
+	--scan->depth;
+}
+
+/* Playback behaviour of a media input, stored in the source's private
+ * settings so it survives restarts with the scene collection. Defaults match
+ * vMix: play when the transition brings it on air, do not restart, pause once
+ * the transition that took it off air has finished. */
+struct MixishMediaOptions {
+	bool playWithTransition = true;
+	bool restartWithTransition = false;
+	bool pauseAfterTransition = true;
+};
+
+MixishMediaOptions MixishMediaOptionsFor(obs_source_t *source)
+{
+	MixishMediaOptions options;
+	OBSDataAutoRelease data = obs_source_get_private_settings(source);
+	if (!data)
+		return options;
+
+	if (obs_data_has_user_value(data, "mixish_play_with_transition"))
+		options.playWithTransition = obs_data_get_bool(data, "mixish_play_with_transition");
+	if (obs_data_has_user_value(data, "mixish_restart_with_transition"))
+		options.restartWithTransition = obs_data_get_bool(data, "mixish_restart_with_transition");
+	if (obs_data_has_user_value(data, "mixish_pause_after_transition"))
+		options.pauseAfterTransition = obs_data_get_bool(data, "mixish_pause_after_transition");
+	return options;
+}
+
+struct MixishMediaCandidate {
+	obs_source_t *source = nullptr;
+};
+
+struct MixishMediaScan {
+	MixishPlaylistManager *playlists = nullptr;
+	QVector<MixishMediaCandidate> *candidates = nullptr;
+};
+
+void MixishScanSceneMedia(obs_scene_t *scene, MixishMediaScan *scan);
+
+bool MixishScanSceneItem(obs_scene_t *, obs_sceneitem_t *item, void *param)
+{
+	auto *scan = static_cast<MixishMediaScan *>(param);
+	obs_source_t *source = item ? obs_sceneitem_get_source(item) : nullptr;
+	if (!source)
+		return true;
+
+	if (obs_sceneitem_is_group(item)) {
+		if (obs_scene_t *group = obs_group_from_source(source))
+			MixishScanSceneMedia(group, scan);
+		return true;
+	}
+
+	if (obs_scene_t *nested = obs_scene_from_source(source)) {
+		MixishScanSceneMedia(nested, scan);
+		return true;
+	}
+
+	/* Playlist media has its own controller and must keep its own
+	 * activation/showing lifecycle. */
+	if (scan->playlists && scan->playlists->IsPlaylistSource(source))
+		return true;
+
+	if ((obs_source_get_output_flags(source) & OBS_SOURCE_CONTROLLABLE_MEDIA) == 0)
+		return true;
+
+	for (const MixishMediaCandidate &candidate : *scan->candidates) {
+		if (candidate.source == source)
+			return true;
+	}
+
+	MixishMediaCandidate candidate;
+	candidate.source = source;
+	scan->candidates->push_back(candidate);
+	return true;
+}
+
+void MixishScanSceneMedia(obs_scene_t *scene, MixishMediaScan *scan)
+{
+	if (!scene || !scan)
+		return;
+
+	obs_scene_enum_items(scene, MixishScanSceneItem, scan);
+}
+
+} // namespace
+
+/* Called just before a transition starts, so the incoming clip is already
+ * playing (or restarted, if configured) on the first frame of the fade
+ * instead of after it. */
+void MixishSwitcher::PrimeMediaForTransition(OBSSource destination)
+{
+	if (!destination)
+		return;
+
+	obs_scene_t *scene = obs_group_or_scene_from_source(destination);
+	if (!scene)
+		return;
+
+	QSet<obs_source_t *> media;
+	MixishAirMediaScan scan;
+	scan.playlists = playlistManager;
+	scan.media = &media;
+	MixishCollectAirMedia(scene, &scan);
+
+	for (obs_source_t *source : media) {
+		MixishMediaOptions options = MixishMediaOptionsFor(source);
+		const enum obs_media_state state = obs_source_media_get_state(source);
+
+		if (options.restartWithTransition || state == OBS_MEDIA_STATE_ENDED ||
+		    state == OBS_MEDIA_STATE_STOPPED) {
+			obs_source_media_restart(source);
+			blog(LOG_INFO, "Mixish: restarting media input '%s' with transition",
+			     obs_source_get_name(source));
+		} else if (options.playWithTransition) {
+			obs_source_media_play_pause(source, false);
+			blog(LOG_INFO, "Mixish: playing media input '%s' with transition",
+			     obs_source_get_name(source));
+		}
+
+		for (MediaHold &hold : mediaHolds) {
+			OBSSource held = OBSGetStrongRef(hold.source);
+			if (held.Get() == source) {
+				hold.pausedByUs = false;
+				hold.wasOnAir = true;
+				break;
+			}
+		}
+	}
+}
+
+void MixishSwitcher::UpdateMediaActivity()
+{
+	if (!main || main->isClosing() || !mixishMode) {
+		ReleaseMediaHolds();
+		return;
+	}
+
+	HookSceneItemSignals();
+
+	OBSSourceAutoRelease transition = obs_get_output_source(0);
+	const bool transitionActive = transition && obs_transition_is_active(transition);
+
+	/* Only Program and the two transition children are on air. Preview is
+	 * deliberately excluded: selecting a clip in Preview must not start it,
+	 * and leaving Preview must not pause a clip that is still on Program. */
+	QSet<obs_source_t *> airMedia;
+	auto collectFrom = [this, &airMedia](obs_source_t *source) {
+		if (!source)
+			return;
+		obs_scene_t *scene = obs_group_or_scene_from_source(source);
+		if (!scene)
+			return;
+
+		MixishAirMediaScan scan;
+		scan.playlists = playlistManager;
+		scan.media = &airMedia;
+		MixishCollectAirMedia(scene, &scan);
+	};
+
+	if (OBSSource program = main->GetProgramSource())
+		collectFrom(program.Get());
+
+	if (transitionActive) {
+		for (enum obs_transition_target target :
+		     {OBS_TRANSITION_SOURCE_A, OBS_TRANSITION_SOURCE_B}) {
+			OBSSourceAutoRelease source = obs_transition_get_source(transition, target);
+			collectFrom(source.Get());
+		}
+
+		/* Fallback for transitions that do not go through the Mixish
+		 * buttons (hotkeys, websocket, quick transitions). */
+		if (!transitionWasActive) {
+			OBSSourceAutoRelease destination =
+				obs_transition_get_source(transition, OBS_TRANSITION_SOURCE_B);
+			PrimeMediaForTransition(OBSSource(destination.Get()));
+		}
+	}
+	transitionWasActive = transitionActive;
+
+	QVector<MixishMediaCandidate> candidates;
+	if (main->ui->scenes) {
+		for (int i = 0; i < main->ui->scenes->count(); ++i) {
+			QListWidgetItem *item = main->ui->scenes->item(i);
+			OBSScene scene = item ? GetOBSRef<OBSScene>(item) : nullptr;
+			if (!scene)
+				continue;
+
+			MixishMediaScan scan;
+			scan.playlists = playlistManager;
+			scan.candidates = &candidates;
+			MixishScanSceneMedia(scene, &scan);
+		}
+	}
+
+	QSet<obs_source_t *> activeSources;
+
+	for (const MixishMediaCandidate &candidate : candidates) {
+		if (!candidate.source)
+			continue;
+
+		const bool onAir = airMedia.contains(candidate.source);
+		activeSources.insert(candidate.source);
+
+		MediaHold *hold = nullptr;
+		for (MediaHold &existing : mediaHolds) {
+			OBSSource held = OBSGetStrongRef(existing.source);
+			if (held.Get() == candidate.source) {
+				hold = &existing;
+				break;
+			}
+		}
+
+		if (!hold) {
+			MediaHold fresh;
+			fresh.source = OBSGetWeakRef(candidate.source);
+			mediaHolds.push_back(fresh);
+			hold = &mediaHolds.last();
+
+			/* One activation reference keeps the source decoding even
+			 * while its scene is off Program. */
+			obs_source_inc_active(candidate.source);
+			blog(LOG_INFO, "Mixish: keeping media input '%s' active",
+			     obs_source_get_name(candidate.source));
+		}
+
+		const MixishMediaOptions options = MixishMediaOptionsFor(candidate.source);
+
+		if (onAir) {
+			hold->wasOnAir = true;
+			hold->userStarted = false;
+
+			if (hold->pausedByUs) {
+				obs_source_media_play_pause(candidate.source, false);
+				hold->pausedByUs = false;
+				blog(LOG_INFO, "Mixish: resuming media input '%s' (on program)",
+				     obs_source_get_name(candidate.source));
+			}
+		} else if (!transitionActive) {
+			if (hold->wasOnAir) {
+				/* The transition that took this input off air has
+				 * finished; only now may the clip pause, so the
+				 * outgoing fade always gets moving video instead of
+				 * a frozen frame. */
+				hold->wasOnAir = false;
+
+				if (options.pauseAfterTransition && !hold->pausedByUs &&
+				    obs_source_media_get_state(candidate.source) ==
+					    OBS_MEDIA_STATE_PLAYING) {
+					obs_source_media_play_pause(candidate.source, true);
+					hold->pausedByUs = true;
+					blog(LOG_INFO,
+					     "Mixish: pausing media input '%s' (transition finished)",
+					     obs_source_get_name(candidate.source));
+				}
+			} else if (options.pauseAfterTransition && !hold->userStarted &&
+				   !hold->autoParked && !hold->pausedByUs &&
+				   obs_source_media_get_state(candidate.source) ==
+					   OBS_MEDIA_STATE_PLAYING) {
+				/* A clip that is only in Preview (or in a scene
+				 * nobody is showing) must not run on its own: OBS
+				 * starts it when the scene becomes visible. Park
+				 * it on its current frame so it continues from
+				 * there when the user asks for it. This only
+				 * catches the initial autoplay; playing it again
+				 * afterwards is treated as intentional. */
+				obs_source_media_play_pause(candidate.source, true);
+				hold->pausedByUs = true;
+				hold->autoParked = true;
+				blog(LOG_INFO, "Mixish: pausing media input '%s' (off air)",
+				     obs_source_get_name(candidate.source));
+			}
+		}
+	}
+
+	/* Let go of media that left the scene list. Expired weak references are
+	 * dropped without touching the destroyed source. */
+	for (int i = mediaHolds.size() - 1; i >= 0; --i) {
+		MediaHold &hold = mediaHolds[i];
+		OBSSource source = OBSGetStrongRef(hold.source);
+		if (!source) {
+			mediaHolds.removeAt(i);
+			continue;
+		}
+
+		if (activeSources.contains(source.Get()))
+			continue;
+
+		if (hold.pausedByUs)
+			obs_source_media_play_pause(source, false);
+		obs_source_dec_active(source);
+		blog(LOG_INFO, "Mixish: releasing media input '%s'", obs_source_get_name(source));
+		mediaHolds.removeAt(i);
+	}
+}
+
+/* The user pressed play on a Mixish transport. Remember that so the off-air
+ * parking rule does not pause the clip again right away. */
+void MixishSwitcher::MarkUserPlayback(obs_source_t *source)
+{
+	if (!source)
+		return;
+
+	for (MediaHold &hold : mediaHolds) {
+		OBSSource held = OBSGetStrongRef(hold.source);
+		if (held.Get() != source)
+			continue;
+
+		hold.userStarted = true;
+		hold.pausedByUs = false;
+		blog(LOG_INFO, "Mixish: media input '%s' started by the user",
+		     obs_source_get_name(source));
+		break;
+	}
+}
+
+void MixishSwitcher::ReleaseMediaHolds()
+{
+	const QVector<MediaHold> holds = mediaHolds;
+	mediaHolds.clear();
+
+	for (const MediaHold &hold : holds) {
+		OBSSource source = OBSGetStrongRef(hold.source);
+		if (!source)
+			continue;
+
+		if (hold.pausedByUs)
+			obs_source_media_play_pause(source, false);
+		obs_source_dec_active(source);
+	}
+}
+
+void MixishSwitcher::HookSceneItemSignals()
+{
+	if (!main || !main->ui->scenes)
+		return;
+
+	for (int i = 0; i < main->ui->scenes->count(); ++i) {
+		QListWidgetItem *item = main->ui->scenes->item(i);
+		OBSScene scene = item ? GetOBSRef<OBSScene>(item) : nullptr;
+		OBSSource sceneSource = scene ? obs_scene_get_source(scene) : nullptr;
+		if (!sceneSource)
+			continue;
+
+		const char *uuid = obs_source_get_uuid(sceneSource);
+		if (!uuid || !*uuid)
+			continue;
+
+		const QString key = QString::fromUtf8(uuid);
+		if (hookedSceneUuids.contains(key))
+			continue;
+
+		signal_handler_t *handler = obs_source_get_signal_handler(sceneSource);
+		if (!handler)
+			continue;
+
+		signal_handler_connect(handler, "item_remove", &MixishSwitcher::SceneItemRemoved, this);
+		hookedSceneUuids.insert(key);
+		hookedScenes.push_back(OBSGetWeakRef(sceneSource));
+	}
+}
+
+void MixishSwitcher::UnhookSceneItemSignals()
+{
+	for (const OBSWeakSource &weak : hookedScenes) {
+		OBSSource source = OBSGetStrongRef(weak);
+		if (!source)
+			continue;
+
+		signal_handler_t *handler = obs_source_get_signal_handler(source);
+		if (handler)
+			signal_handler_disconnect(handler, "item_remove",
+						  &MixishSwitcher::SceneItemRemoved, this);
+	}
+
+	hookedScenes.clear();
+	hookedSceneUuids.clear();
+}
+
+void MixishSwitcher::SceneItemRemoved(void *data, calldata_t *params)
+{
+	auto *self = static_cast<MixishSwitcher *>(data);
+	if (!self || !params)
+		return;
+
+	auto *scene = static_cast<obs_scene_t *>(calldata_ptr(params, "scene"));
+	obs_source_t *sceneSource = scene ? obs_scene_get_source(scene) : nullptr;
+	if (!sceneSource)
+		return;
+
+	OBSSource sceneRef = sceneSource;
+	QMetaObject::invokeMethod(
+		self, [self, sceneRef]() { self->ScheduleEmptyScenePrune(sceneRef.Get()); },
+		Qt::QueuedConnection);
+}
+
+void MixishSwitcher::ScheduleEmptyScenePrune(obs_source_t *sceneSource)
+{
+	if (!sceneSource)
+		return;
+
+	OBSSource sceneRef = sceneSource;
+
+	/* The scene item is detached synchronously, but OBS finishes cleaning up
+	 * the removed source on a later tick. Give it a moment before deciding
+	 * the scene is empty. */
+	QTimer::singleShot(250, this, [this, sceneRef]() {
+		if (!sceneRef || !main || main->isClosing() || !main->ui->scenes)
+			return;
+
+		bool listed = false;
+		for (int i = 0; i < main->ui->scenes->count(); ++i) {
+			QListWidgetItem *item = main->ui->scenes->item(i);
+			OBSScene scene = item ? GetOBSRef<OBSScene>(item) : nullptr;
+			if (scene && obs_scene_get_source(scene) == sceneRef.Get()) {
+				listed = true;
+				break;
+			}
+		}
+
+		if (!listed)
+			return;
+
+		obs_scene_t *scene = obs_scene_from_source(sceneRef);
+		if (!scene)
+			return;
+
+		int itemCount = 0;
+		obs_scene_enum_items(
+			scene,
+			[](obs_scene_t *, obs_sceneitem_t *, void *param) {
+				++(*static_cast<int *>(param));
+				return true;
+			},
+			&itemCount);
+
+		if (itemCount > 0)
+			return;
+
+		const char *name = obs_source_get_name(sceneRef);
+		blog(LOG_INFO, "Mixish: removing empty input scene '%s'", name ? name : "");
+
+		obs_source_remove(sceneRef);
+		main->RemoveScene(sceneRef);
+
+		if (inputBar)
+			inputBar->Rebuild();
+	});
 }
 
 void MixishSwitcher::OpenSceneMenu(OBSScene scene, QWidget *anchor)

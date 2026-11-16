@@ -25,6 +25,8 @@
 
 #include <QImageWriter>
 
+#include <algorithm>
+
 constexpr int kMinimumThumbnailUpdateInterval = 100;
 constexpr int kThumbnailUpdateInterval = 5000;
 
@@ -163,27 +165,46 @@ void ThumbnailManager::updateNextItem(size_t cycleDepth)
 		std::string uuid = priorityQueue.front();
 		priorityQueue.pop_front();
 
-		item = thumbnailList[uuid];
-		updateQueue.emplace_back(std::move(uuid));
+		auto entry = thumbnailList.find(uuid);
+		if (entry == thumbnailList.end() || !entry->second) {
+			/* Mixish: stale queue entry after a source removal. */
+			if (cycleDepth < thumbnailList.size()) {
+				updateNextItem(cycleDepth + 1);
+				return;
+			}
+		} else {
+			item = entry->second;
+			updateQueue.emplace_back(std::move(uuid));
 
-		if (!updateItem(item) && cycleDepth < thumbnailList.size()) {
-			updateNextItem(cycleDepth + 1);
-			return;
+			if (!updateItem(item) && cycleDepth < thumbnailList.size()) {
+				updateNextItem(cycleDepth + 1);
+				return;
+			}
 		}
 	} else if (!updateQueue.empty()) {
 		std::string uuid = updateQueue.front();
 
 		updateQueue.pop_front();
-		item = thumbnailList[uuid];
-		updateQueue.emplace_back(std::move(uuid));
+		auto entry = thumbnailList.find(uuid);
+		if (entry == thumbnailList.end() || !entry->second) {
+			/* Mixish: the source may be removed while its uuid is
+			 * still queued. Never insert a null item here. */
+			if (cycleDepth < thumbnailList.size()) {
+				updateNextItem(cycleDepth + 1);
+				return;
+			}
+		} else {
+			item = entry->second;
+			updateQueue.emplace_back(std::move(uuid));
 
-		if (item->isDefaultPixmap()) {
-			quickUpdate = true;
-		}
+			if (item->isDefaultPixmap()) {
+				quickUpdate = true;
+			}
 
-		if (!updateItem(item) && cycleDepth < thumbnailList.size()) {
-			updateNextItem(cycleDepth + 1);
-			return;
+			if (!updateItem(item) && cycleDepth < thumbnailList.size()) {
+				updateNextItem(cycleDepth + 1);
+				return;
+			}
 		}
 	}
 
@@ -202,19 +223,19 @@ void ThumbnailManager::updateTick()
 
 void ThumbnailManager::removeIdFromQueues(const std::string &uuid)
 {
-	auto it = std::find(updateQueue.begin(), updateQueue.end(), uuid);
-	if (it != updateQueue.end()) {
-		updateQueue.erase(it);
-	}
-
-	it = std::find(priorityQueue.begin(), priorityQueue.end(), uuid);
-	if (it != priorityQueue.end()) {
-		priorityQueue.erase(it);
-	}
+	updateQueue.erase(std::remove(updateQueue.begin(), updateQueue.end(), uuid), updateQueue.end());
+	priorityQueue.erase(std::remove(priorityQueue.begin(), priorityQueue.end(), uuid), priorityQueue.end());
 }
 
 void ThumbnailManager::addToPriorityQueue(const std::string &uuid, bool immediate)
 {
+	/* Mixish: views can outlive a removed source by one event-loop turn.
+	 * Ignore update requests once the thumbnail item is gone. */
+	auto entry = thumbnailList.find(uuid);
+	if (entry == thumbnailList.end() || !entry->second) {
+		return;
+	}
+
 	// Skip if uuid is already at the front of the priority queue
 	if (!priorityQueue.empty() && priorityQueue[0] == uuid) {
 		return;

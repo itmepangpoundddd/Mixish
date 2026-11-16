@@ -25,6 +25,7 @@
 #include <properties-view.hpp>
 
 #include <QBoxLayout>
+#include <QCheckBox>
 #include <QCloseEvent>
 #include <QComboBox>
 #include <QFrame>
@@ -61,6 +62,40 @@ static QString SourceTypeName(obs_source_t *source)
 	const char *id = obs_source_get_id(source);
 	const char *name = id ? obs_source_get_display_name(id) : nullptr;
 	return name ? QString::fromUtf8(name) : QString();
+}
+
+/* Media playback options live in the source's private settings, which OBS
+ * saves with the scene collection. Defaults follow vMix. */
+struct MediaPlaybackOptions {
+	bool playWithTransition = true;
+	bool restartWithTransition = false;
+	bool pauseAfterTransition = true;
+};
+
+MediaPlaybackOptions ReadPlaybackOptions(obs_source_t *source)
+{
+	MediaPlaybackOptions options;
+	OBSDataAutoRelease data = obs_source_get_private_settings(source);
+	if (!data)
+		return options;
+
+	if (obs_data_has_user_value(data, "mixish_play_with_transition"))
+		options.playWithTransition = obs_data_get_bool(data, "mixish_play_with_transition");
+	if (obs_data_has_user_value(data, "mixish_restart_with_transition"))
+		options.restartWithTransition = obs_data_get_bool(data, "mixish_restart_with_transition");
+	if (obs_data_has_user_value(data, "mixish_pause_after_transition"))
+		options.pauseAfterTransition = obs_data_get_bool(data, "mixish_pause_after_transition");
+	return options;
+}
+
+void WritePlaybackOption(obs_source_t *source, const char *key, bool value)
+{
+	if (!source)
+		return;
+
+	OBSDataAutoRelease data = obs_source_get_private_settings(source);
+	if (data)
+		obs_data_set_bool(data, key, value);
 }
 
 } // namespace
@@ -190,6 +225,43 @@ void MixishInputProperties::BuildUi()
 	hostLayout->addWidget(emptyLabel);
 
 	if (source) {
+		if (obs_source_get_output_flags(source) & OBS_SOURCE_CONTROLLABLE_MEDIA) {
+			playbackGroup = new QGroupBox(tr("Playback"), host);
+			playbackGroup->setObjectName(QStringLiteral("mixishPlaybackOptions"));
+
+			auto *playbackLayout = new QVBoxLayout(playbackGroup);
+			playbackLayout->setContentsMargins(10, 8, 10, 10);
+			playbackLayout->setSpacing(6);
+
+			playWithTransitionBox =
+				new QCheckBox(tr("Automatically play with transition"), playbackGroup);
+			restartWithTransitionBox =
+				new QCheckBox(tr("Automatically restart with transition"), playbackGroup);
+			pauseAfterTransitionBox =
+				new QCheckBox(tr("Automatically pause after transition"), playbackGroup);
+
+			playbackLayout->addWidget(playWithTransitionBox);
+			playbackLayout->addWidget(restartWithTransitionBox);
+			playbackLayout->addWidget(pauseAfterTransitionBox);
+
+			const MediaPlaybackOptions options = ReadPlaybackOptions(source);
+			playWithTransitionBox->setChecked(options.playWithTransition);
+			restartWithTransitionBox->setChecked(options.restartWithTransition);
+			pauseAfterTransitionBox->setChecked(options.pauseAfterTransition);
+
+			hostLayout->addWidget(playbackGroup);
+
+			connect(playWithTransitionBox, &QCheckBox::toggled, this, [this](bool on) {
+				WritePlaybackOption(source, "mixish_play_with_transition", on);
+			});
+			connect(restartWithTransitionBox, &QCheckBox::toggled, this, [this](bool on) {
+				WritePlaybackOption(source, "mixish_restart_with_transition", on);
+			});
+			connect(pauseAfterTransitionBox, &QCheckBox::toggled, this, [this](bool on) {
+				WritePlaybackOption(source, "mixish_pause_after_transition", on);
+			});
+		}
+
 		OBSDataAutoRelease settings = obs_source_get_settings(source);
 		view = new OBSPropertiesView(settings.Get(), source, (PropertiesReloadCallback)obs_source_properties,
 					     (PropertiesUpdateCallback) nullptr,
@@ -360,7 +432,7 @@ void MixishInputProperties::PopulateSections()
 	if (view)
 		view->setVisible(hasProperties);
 	if (emptyLabel)
-		emptyLabel->setVisible(!hasProperties);
+		emptyLabel->setVisible(!hasProperties && !playbackGroup);
 }
 
 void MixishInputProperties::ScrollToSection(QListWidgetItem *item)
@@ -401,6 +473,13 @@ void MixishInputProperties::RestoreDefaults()
 
 	OBSDataAutoRelease settings = obs_source_get_settings(source);
 	obs_data_clear(settings);
+
+	if (playWithTransitionBox) {
+		/* Writing the vMix defaults back into the private settings. */
+		playWithTransitionBox->setChecked(true);
+		restartWithTransitionBox->setChecked(false);
+		pauseAfterTransitionBox->setChecked(true);
+	}
 
 	if (view && !view->DeferUpdate())
 		obs_source_update(source, nullptr);

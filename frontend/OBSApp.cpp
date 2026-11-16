@@ -27,6 +27,7 @@
 #include <utility/models/branches.hpp>
 #endif
 #include <widgets/OBSBasic.hpp>
+#include <widgets/mixish/MixishSplash.hpp>
 
 #if !defined(_WIN32) && !defined(__APPLE__)
 #include <obs-nix-platform.h>
@@ -1275,6 +1276,8 @@ bool OBSApp::OBSInit()
 {
 	ProfileScope("OBSApp::OBSInit");
 
+	MixishSplashScreen::Show();
+
 	qRegisterMetaType<VoidFunc>("VoidFunc");
 
 #if !defined(_WIN32) && !defined(__APPLE__)
@@ -1344,11 +1347,15 @@ bool OBSApp::OBSInit()
 
 	thumbnailManager = new ThumbnailManager(this);
 
+	MixishSplashScreen::SetStatus(tr("Loading scenes and plugins..."));
+
 	mainWindow = new OBSBasic();
 
 	mainWindow->setAttribute(Qt::WA_DeleteOnClose, true);
 
 	mainWindow->OBSInit();
+
+	MixishSplashScreen::Finish();
 
 	connect(OBSBasic::Get(), &OBSBasic::mainWindowClosed, crashHandler_.get(),
 		&OBS::CrashHandler::applicationShutdownHandler);
