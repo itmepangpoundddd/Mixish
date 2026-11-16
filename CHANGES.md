@@ -11,7 +11,9 @@ modified work.
 - Release contents: Playlist input (Stage 1), shared media transport with a Program transport, the transition-safe media playback rewrite with the three vMix-style playback options, Del pruning of auto-created empty input scenes, the Add Input ordering fix, the `ThumbnailManager` stability fix, and the startup splash. Per-file details follow in the sections below.
 - `RELEASE_NOTES.md` - release notes for GitHub Releases.
 - Installer: `G:\Mixish\obs-studio-master\dist\Mixish-Setup-0.0.2-x64.exe` (Inno Setup 7, `"C:\Program Files\Inno Setup 7\ISCC.exe" installer\mixish.iss`).
-- Tag: `v0.0.2`.
+- Installer size 155,874,041 bytes; SHA-256 `47d7bd8b37bf5aeb64caa3992af27a5dd2b0bc1ec4436af56de48339f7c189df`.
+- Built binaries report `0.0.2` (verified in `obs.dll` strings and on the splash version label).
+- Tag: `v0.0.2`, published as a GitHub Release with the installer and its checksum attached.
 
 ## Build environment notes
 

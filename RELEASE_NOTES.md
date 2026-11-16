@@ -1,6 +1,6 @@
 # Mixish 0.0.2
 
-Released 2026-11-16 · [All changes](../CHANGES.md)
+Released 2026-11-16 · [All changes](CHANGES.md)
 
 Second public build of Mixish, a live production switcher built on OBS Studio.
 This release adds the Playlist input, fixes media playback during transitions,
