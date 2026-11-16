@@ -1,8 +1,8 @@
 [Setup]
 AppId={{94DACB03-80DC-4AB6-873B-A3F9D9EF6558}
 AppName=Mixish
-AppVersion=0.0.1
-AppVerName=Mixish 0.0.1
+AppVersion=0.0.2
+AppVerName=Mixish 0.0.2
 AppPublisher=Mixish
 AppPublisherURL=https://github.com/
 DefaultDirName={autopf}\Mixish
@@ -10,7 +10,7 @@ DefaultGroupName=Mixish
 DisableProgramGroupPage=yes
 LicenseFile=..\COPYING
 OutputDir=..\..\dist
-OutputBaseFilename=Mixish-Setup-0.0.1-x64
+OutputBaseFilename=Mixish-Setup-0.0.2-x64
 SetupIconFile=..\frontend\cmake\windows\mixish.ico
 UninstallDisplayIcon={app}\bin\64bit\obs64.exe
 Compression=lzma2/ultra64
@@ -22,7 +22,7 @@ PrivilegesRequired=admin
 MinVersion=10.0
 CloseApplications=yes
 RestartApplications=no
-VersionInfoVersion=0.0.1.0
+VersionInfoVersion=0.0.2.0
 VersionInfoProductName=Mixish
 VersionInfoCompany=Mixish
 
