@@ -15,6 +15,20 @@ modified work.
 - Persistence: new optional `stream` bool per queue item; missing key loads as `false`, so 0.0.2 scene collections are unchanged.
 - Build: `build_x64_local\frontend\obs-studio.vcxproj` RelWithDebInfo x64 compiles and links cleanly. Runtime verification (local HLS VOD, live URL, queue file, bad URL, restart) is still pending.
 
+### Shutdown stability (crash fix)
+
+Root cause found for the intermittent crash on exit (`obs_sceneitem_destroy` -> `obs_source_release` on `tiny_tubular_task_thread` during `obs_shutdown`):
+
+- `MixishPlaylistManager.cpp` - the duration probe was created as a **public** source, so it was saved into the scene collection and stayed registered at shutdown; also its creation reference was never released (`OBSSource` adds its own reference on assignment). Fixed: the probe is now created with `obs_source_create_private()` and the creation reference is released, so it is never saved and is destroyed when probing stops. Leftover `Mixish Duration Probe` entries were removed from the development scene collection.
+- `MixishOverlayController.cpp` - the private `fade_transition` sources (`Mixish Overlay Fade N`) had the same creation-reference leak, so every assigned overlay left a private source alive at shutdown. Fixed: the creation reference is released after handing the source to the `OBSSource` member.
+- These leaked sources were force-destroyed by `obs_shutdown` while OBS still had scenes/items queued for destruction. The destroy queue then released those sources a second time from the scene teardown path, which logged `Double destroy just occurred` and crashed in `remove_all_items()`.
+- `MixishSwitcher.cpp` / `.hpp` - added a shutdown/collection-clear guard: `Sync()`, `SceneItemRemoved()` and the queued `ScheduleEmptyScenePrune()` no longer touch libobs once `ClearSceneData()` has started, so a queued empty-scene prune cannot delete a scene in the middle of OBS's teardown.
+- `MixishInputBar.cpp` / `.hpp` - new `ClearOBSRefs()` unbinds the INPUTS video transport (it holds a strong `OBSSource`) and detaches the playlist controller. Called on shutdown and on scene-collection changes, so a bound media source cannot outlive the collection.
+- Result on the real profile (`WM_CLOSE` soak, RelWithDebInfo x64):
+  - Before: `Not all sources were cleared` on every run (Image 2, Timer, Mixish Duration Probe), 3 private sources left at shutdown, `Double destroy` in the crashing run, `Number of memory leaks: 4`, 1 crash in 6 runs.
+  - After: 0 orphan-source logs, 0 sources left at shutdown, 0 `Double destroy`, `Number of memory leaks: 1`, no crash files. Verified over 20 consecutive close cycles, then rebuilt and verified 5 more (25 clean cycles total).
+- `CHANGES.md` note: the 0.0.1/0.0.2 crash files share this stack signature, so they were likely the same class of leaked reference. The two leaks fixed here are confirmed and reproducible; other holders of libobs references can still produce the same signature.
+
 ## Release 0.0.2
 
 - Version bumped from `0.0.1` to `0.0.2` in `README.md`, `README.rst` and `installer/mixish.iss` (AppVersion, AppVerName, output filename and VersionInfoVersion).

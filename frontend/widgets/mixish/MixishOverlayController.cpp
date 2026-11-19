@@ -355,8 +355,12 @@ bool MixishOverlayController::Assign(int index, OBSScene input, bool turnOn)
 
 	if (!channel.fade) {
 		const QString fadeName = QStringLiteral("Mixish Overlay Fade %1").arg(index + 1);
-		channel.fade = obs_source_create_private("fade_transition",
-							 fadeName.toUtf8().constData(), nullptr);
+		obs_source_t *fade =
+			obs_source_create_private("fade_transition", fadeName.toUtf8().constData(), nullptr);
+		/* OBSSource adds its own reference; release the creation reference
+		 * so the fade is destroyed when the channel lets go of it. */
+		channel.fade = fade;
+		obs_source_release(fade);
 	}
 
 	/* The transition is attached only while a fade runs (see SetOnAir):

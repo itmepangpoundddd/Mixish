@@ -57,6 +57,12 @@ public:
 	 * sources it points at. */
 	void PrepareForSceneCollectionChange();
 
+	/* Releases the remaining strong libobs references owned by the input
+	 * bar (the video transport binding and the playlist controller). Called
+	 * during shutdown, after PrepareForSceneCollectionChange(), so nothing
+	 * here can keep a source alive past ClearSceneData. */
+	void ClearOBSRefs();
+
 	/* Restarts thumbnails and rebuilds tiles once a collection is loaded. */
 	void OnSceneCollectionLoaded();
 

@@ -651,11 +651,19 @@ bool MixishPlaylistManager::EnsureProbeSource(const QString &initialPath)
 	obs_data_set_bool(settings, "restart_on_activate", false);
 	obs_data_set_bool(settings, "close_when_inactive", false);
 
-	probeSource = obs_source_create("ffmpeg_source", name.toUtf8().constData(), settings, nullptr);
-	if (!probeSource) {
+	/* Private: the probe is a Mixish implementation detail. A public source
+	 * would be saved into the scene collection and would remain registered
+	 * at shutdown, where OBS reports it as an uncleared source. */
+	obs_source_t *probe = obs_source_create_private("ffmpeg_source", name.toUtf8().constData(), settings);
+	if (!probe) {
 		blog(LOG_WARNING, "Mixish playlist: unable to create the duration probe source");
 		return false;
 	}
+
+	/* OBSSource adds its own reference; release the creation reference so
+	 * the probe is actually destroyed when probeSource is cleared. */
+	probeSource = probe;
+	obs_source_release(probe);
 
 	obs_source_set_muted(probeSource.Get(), true);
 	obs_source_inc_showing(probeSource.Get());

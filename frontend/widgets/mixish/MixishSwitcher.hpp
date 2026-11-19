@@ -182,6 +182,12 @@ private:
 	bool initialized = false;
 	bool dockStateCaptured = false;
 
+	/* Set when the frontend starts tearing the scene collection down. Every
+	 * deferred callback that could touch libobs checks this so it cannot
+	 * re-enter OBS while the collection is being destroyed. */
+	bool shuttingDown = false;
+	bool collectionClearing = false;
+
 	bool scenesDockVisible = true;
 	bool sourcesDockVisible = true;
 	bool transitionsDockVisible = true;

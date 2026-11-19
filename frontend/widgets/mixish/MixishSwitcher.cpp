@@ -166,6 +166,10 @@ void MixishSwitcher::FrontendEvent(enum obs_frontend_event event, void *data)
 
 void MixishSwitcher::PrepareForShutdown()
 {
+	if (shuttingDown)
+		return;
+	shuttingDown = true;
+
 	ReleaseMediaHolds();
 	UnhookSceneItemSignals();
 
@@ -180,8 +184,13 @@ void MixishSwitcher::PrepareForShutdown()
 	if (playlistManager)
 		playlistManager->PrepareForShutdown();
 
-	if (inputBar)
+	if (inputBar) {
 		inputBar->PrepareForSceneCollectionChange();
+		/* The video transport holds a strong reference to the media
+		 * source it is bound to. Release it here so it cannot keep a
+		 * source alive past ClearSceneData. */
+		inputBar->ClearOBSRefs();
+	}
 	if (overlayController)
 		overlayController->Shutdown();
 
@@ -191,6 +200,11 @@ void MixishSwitcher::PrepareForShutdown()
 
 void MixishSwitcher::PrepareForSceneCollectionChange()
 {
+	if (shuttingDown)
+		return;
+
+	collectionClearing = true;
+
 	ReleaseMediaHolds();
 	UnhookSceneItemSignals();
 
@@ -203,14 +217,20 @@ void MixishSwitcher::PrepareForSceneCollectionChange()
 	if (playlistManager)
 		playlistManager->PrepareForSceneCollectionChange();
 
-	if (inputBar)
+	if (inputBar) {
 		inputBar->PrepareForSceneCollectionChange();
+		/* Release the transport's source binding while libobs is still
+		 * alive; Rebuild() rebinds it after the next collection loads. */
+		inputBar->ClearOBSRefs();
+	}
 	if (overlayController)
 		overlayController->PrepareForSceneCollectionChange();
 }
 
 void MixishSwitcher::OnSceneCollectionLoaded()
 {
+	collectionClearing = false;
+
 	if (overlayController)
 		overlayController->OnSceneCollectionLoaded();
 	if (inputBar)
@@ -348,6 +368,9 @@ void MixishSwitcher::OnPreviewProgramModeChanged(bool enabled)
 
 void MixishSwitcher::Sync()
 {
+	if (shuttingDown)
+		return;
+
 	if (overlayController)
 		overlayController->Sync();
 
@@ -1651,6 +1674,12 @@ void MixishSwitcher::SceneItemRemoved(void *data, calldata_t *params)
 	if (!self || !params)
 		return;
 
+	/* During collection clear every scene is already on its way out, and
+	 * touching the UI list from a queued callback would race OBS's own
+	 * teardown. */
+	if (self->shuttingDown || self->collectionClearing)
+		return;
+
 	auto *scene = static_cast<obs_scene_t *>(calldata_ptr(params, "scene"));
 	obs_source_t *sceneSource = scene ? obs_scene_get_source(scene) : nullptr;
 	if (!sceneSource)
@@ -1665,6 +1694,11 @@ void MixishSwitcher::SceneItemRemoved(void *data, calldata_t *params)
 void MixishSwitcher::ScheduleEmptyScenePrune(obs_source_t *sceneSource)
 {
 	if (!sceneSource)
+		return;
+
+	/* A queued prune can outlive the event that scheduled it; never touch
+	 * the scene list once the collection is being torn down. */
+	if (shuttingDown || collectionClearing)
 		return;
 
 	OBSSource sceneRef = sceneSource;

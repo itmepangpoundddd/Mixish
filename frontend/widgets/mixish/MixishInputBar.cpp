@@ -378,6 +378,23 @@ void MixishInputBar::PrepareForSceneCollectionChange()
 	ClearTiles();
 }
 
+void MixishInputBar::ClearOBSRefs()
+{
+	if (rebuildTimer)
+		rebuildTimer->stop();
+	if (thumbnailTimer)
+		thumbnailTimer->stop();
+
+	if (playlistPanel)
+		playlistPanel->SetController(nullptr);
+	panelController = nullptr;
+
+	/* The transport stores a strong OBSSource for the media source it is
+	 * bound to; unbind it so the source can be destroyed by OBS. */
+	if (videoControls)
+		videoControls->SetScene(OBSScene());
+}
+
 void MixishInputBar::OnSceneCollectionLoaded()
 {
 	thumbnailIndex = 0;
