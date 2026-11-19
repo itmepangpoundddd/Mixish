@@ -50,6 +50,7 @@ private:
 	int SelectedIndex() const;
 
 	void AddItems();
+	void AddUrl();
 	void EditItem();
 	void RemoveItems();
 	void PlayOut();
@@ -62,6 +63,7 @@ private:
 	QComboBox *playlistCombo = nullptr;
 	QListWidget *list = nullptr;
 	QPushButton *addButton = nullptr;
+	QPushButton *addUrlButton = nullptr;
 	QPushButton *editButton = nullptr;
 	QPushButton *removeButton = nullptr;
 	QPushButton *playOutButton = nullptr;

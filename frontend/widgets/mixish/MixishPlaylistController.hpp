@@ -31,6 +31,11 @@ struct MixishPlaylistItem {
 	bool enabled = true;
 	bool missing = false;
 	double duration = -1.0;
+	/* HLS passthrough: the media source opens this path directly instead of
+	 * the queue expanding it into segments. streamError is transient and
+	 * never saved. */
+	bool stream = false;
+	bool streamError = false;
 };
 
 /* One Mixish playlist backed by a native OBS media source.
@@ -123,6 +128,7 @@ private:
 	double lastGapMs = -1.0;
 	int64_t gapStartNs = 0;
 	int gapToken = 0;
+	int streamToken = 0;
 	QString gapFromName;
 	bool gapFromEnd = false;
 };

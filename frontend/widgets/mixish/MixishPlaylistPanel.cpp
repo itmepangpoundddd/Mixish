@@ -28,7 +28,9 @@
 #include <QFont>
 #include <QHBoxLayout>
 #include <QIcon>
+#include <QInputDialog>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QPainter>
 #include <QPixmap>
@@ -36,6 +38,7 @@
 #include <QSet>
 #include <QSignalBlocker>
 #include <QTimer>
+#include <QUrl>
 #include <QVBoxLayout>
 
 #include "moc_MixishPlaylistPanel.cpp"
@@ -68,6 +71,15 @@ QString FormatDuration(double seconds)
 	if (hours > 0)
 		return QString::asprintf("%d:%02d:%02d", hours, minutes, secs);
 	return QString::asprintf("%d:%02d", minutes, secs);
+}
+
+QString UrlItemName(const QString &url)
+{
+	const QUrl parsed(url);
+	const QString fileName = QFileInfo(parsed.path()).fileName();
+	if (!fileName.isEmpty())
+		return fileName;
+	return parsed.host().isEmpty() ? url : parsed.host();
 }
 
 QIcon QueueIcon(bool available)
@@ -124,10 +136,12 @@ MixishPlaylistPanel::MixishPlaylistPanel(MixishSwitcher *switcher_, QWidget *par
 	};
 
 	addButton = makeToolbarButton(tr("Add"), QStringLiteral("mixishPlaylistAdd"));
+	addUrlButton = makeToolbarButton(tr("Add URL…"), QStringLiteral("mixishPlaylistAddUrl"));
 	editButton = makeToolbarButton(tr("Edit"), QStringLiteral("mixishPlaylistEdit"));
 	removeButton = makeToolbarButton(tr("Remove"), QStringLiteral("mixishPlaylistRemove"));
 
 	addButton->setToolTip(tr("Add media or queue files to this playlist"));
+	addUrlButton->setToolTip(tr("Add an HLS stream URL to this playlist"));
 	editButton->setToolTip(tr("Replace the selected queue item with another file"));
 	removeButton->setToolTip(tr("Remove the selected queue items"));
 	layout->addLayout(toolbar);
@@ -179,6 +193,7 @@ MixishPlaylistPanel::MixishPlaylistPanel(MixishSwitcher *switcher_, QWidget *par
 		UpdateButtons();
 	});
 	connect(addButton, &QPushButton::clicked, this, &MixishPlaylistPanel::AddItems);
+	connect(addUrlButton, &QPushButton::clicked, this, &MixishPlaylistPanel::AddUrl);
 	connect(editButton, &QPushButton::clicked, this, &MixishPlaylistPanel::EditItem);
 	connect(removeButton, &QPushButton::clicked, this, &MixishPlaylistPanel::RemoveItems);
 	connect(playOutButton, &QPushButton::clicked, this, &MixishPlaylistPanel::PlayOut);
@@ -290,16 +305,23 @@ void MixishPlaylistPanel::RefreshList()
 		QString text = ItemLabel(entry);
 		if (i == current)
 			text.prepend(QStringLiteral("▶  "));
-		text += QStringLiteral("   ·   ") + FormatDuration(entry.duration);
+
+		QString durationText = FormatDuration(entry.duration);
+		if (entry.stream)
+			durationText = entry.streamError ? tr("ERROR") : tr("LIVE");
+
+		text += QStringLiteral("   ·   ") + durationText;
 		if (!available)
 			text += tr(" (missing)");
 
 		auto *item = new QListWidgetItem(QueueIcon(available), text);
 		item->setData(Qt::UserRole, i);
-		item->setToolTip(tr("%1\nDuration: %2").arg(entry.path, FormatDuration(entry.duration)));
+		item->setToolTip(tr("%1\nDuration: %2").arg(entry.path, durationText));
 		item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
 
-		if (!available)
+		if (entry.streamError)
+			item->setForeground(QColor(QStringLiteral("#E5484D")));
+		else if (!available)
 			item->setForeground(QColor(QStringLiteral("#777777")));
 
 		if (i == current) {
@@ -337,6 +359,8 @@ void MixishPlaylistPanel::UpdateButtons()
 
 	if (addButton)
 		addButton->setEnabled(hasController);
+	if (addUrlButton)
+		addUrlButton->setEnabled(hasController);
 	if (editButton)
 		editButton->setEnabled(hasController && hasSelection);
 	if (removeButton)
@@ -397,6 +421,40 @@ void MixishPlaylistPanel::AddItems()
 	if (items.isEmpty())
 		return;
 
+	controller->AddItems(items);
+	if (manager)
+		manager->RecheckItems(items);
+	Refresh();
+}
+
+void MixishPlaylistPanel::AddUrl()
+{
+	if (!controller || !manager)
+		return;
+
+	bool ok = false;
+	QString url = QInputDialog::getText(this, tr("Add Stream URL"),
+					    tr("HLS playlist URL:"), QLineEdit::Normal,
+					    QString(), &ok);
+	if (!ok)
+		return;
+
+	url = url.trimmed();
+	if (url.isEmpty())
+		return;
+
+	const QString scheme = QUrl(url).scheme().toLower();
+	if (scheme != QStringLiteral("http") && scheme != QStringLiteral("https"))
+		return;
+
+	MixishPlaylistItem item;
+	item.path = url;
+	item.name = UrlItemName(url);
+	item.duration = -1.0;
+	item.missing = false;
+	item.stream = true;
+
+	const QVector<MixishPlaylistItem> items({item});
 	controller->AddItems(items);
 	if (manager)
 		manager->RecheckItems(items);

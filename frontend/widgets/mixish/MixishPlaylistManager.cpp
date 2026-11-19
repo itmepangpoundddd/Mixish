@@ -26,6 +26,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QTimer>
+#include <QUrl>
 
 #include "moc_MixishPlaylistManager.cpp"
 
@@ -34,10 +35,53 @@ namespace {
 constexpr int kProbeIntervalMs = 200;
 constexpr int kProbeTimeoutMs = 15000;
 constexpr int kSaveDelayMs = 500;
+constexpr int kHlsSniffBytes = 64 * 1024;
 
 bool PathIsRemote(const QString &path)
 {
 	return path.contains(QStringLiteral("://"));
+}
+
+bool PlaylistSuffix(const QString &path)
+{
+	const QString suffix = QFileInfo(path).suffix().toLower();
+	return suffix == QStringLiteral("m3u") || suffix == QStringLiteral("m3u8");
+}
+
+/* A remote m3u/m3u8 URL is a stream endpoint. The query string is ignored
+ * when looking at the suffix. */
+bool IsRemoteStreamUrl(const QString &path)
+{
+	return PathIsRemote(path) && PlaylistSuffix(QUrl(path).path());
+}
+
+/* A real HLS playlist carries #EXT-X- tags. A Mixish queue file only has
+ * #EXTM3U/#EXTINF, so it still expands into its individual entries. */
+bool IsLocalHlsPlaylist(const QString &path)
+{
+	if (PathIsRemote(path) || !PlaylistSuffix(path))
+		return false;
+
+	QFile file(path);
+	if (!file.open(QIODevice::ReadOnly))
+		return false;
+
+	const QByteArray head = file.read(kHlsSniffBytes);
+	for (const QByteArray &line : head.split('\n')) {
+		if (line.trimmed().startsWith("#EXT-X-"))
+			return true;
+	}
+
+	return false;
+}
+
+QString UrlStreamName(const QString &url)
+{
+	const QUrl parsed(url);
+	const QString fileName = QFileInfo(parsed.path()).fileName();
+	if (!fileName.isEmpty())
+		return fileName;
+	return parsed.host().isEmpty() ? url : parsed.host();
 }
 
 struct SceneSourceSearch {
@@ -376,6 +420,10 @@ void MixishPlaylistManager::LoadState()
 							if (obs_data_has_user_value(itemData, "duration"))
 								item.duration = obs_data_get_double(
 									itemData, "duration");
+							/* Missing in 0.0.2 collections, and
+							 * obs_data_get_bool() defaults to false. */
+							item.stream =
+								obs_data_get_bool(itemData, "stream");
 							item.missing = !ItemAvailable(item);
 
 							items.push_back(item);
@@ -477,7 +525,8 @@ void MixishPlaylistManager::VerifyDurations(MixishPlaylistController *controller
 
 	const QVector<MixishPlaylistItem> &items = controller->Items();
 	for (const MixishPlaylistItem &item : items) {
-		if (item.path.isEmpty() || PathIsRemote(item.path) || !QFileInfo::exists(item.path))
+		if (item.path.isEmpty() || item.stream || PathIsRemote(item.path) ||
+		    !QFileInfo::exists(item.path))
 			continue;
 		if (verifiedPaths.contains(item.path))
 			continue;
@@ -498,7 +547,7 @@ void MixishPlaylistManager::RecheckItems(const QVector<MixishPlaylistItem> &item
 		return;
 
 	for (const MixishPlaylistItem &item : items) {
-		if (item.path.isEmpty())
+		if (item.path.isEmpty() || item.stream)
 			continue;
 		verifiedPaths.remove(item.path);
 		probeTried.remove(item.path);
@@ -559,7 +608,7 @@ void MixishPlaylistManager::ScheduleProbesForAll()
 
 		const QVector<MixishPlaylistItem> &items = controller->Items();
 		for (const MixishPlaylistItem &item : items) {
-			if (item.enabled && item.duration < 0.0)
+			if (item.enabled && !item.stream && item.duration < 0.0)
 				ScheduleProbe(item.path, item.duration);
 		}
 	}
@@ -719,7 +768,30 @@ QVector<MixishPlaylistItem> MixishPlaylistManager::BuildItems(const QStringList 
 		const QFileInfo info(file);
 		const QString suffix = info.suffix().toLower();
 
-		if (suffix == QStringLiteral("m3u") || suffix == QStringLiteral("m3u8")) {
+		if (IsRemoteStreamUrl(file)) {
+			MixishPlaylistItem item;
+			item.path = file;
+			item.name = UrlStreamName(file);
+			item.duration = -1.0;
+			item.missing = false;
+			item.stream = true;
+			items.push_back(item);
+			continue;
+		}
+
+		if (!PathIsRemote(file) &&
+		    (suffix == QStringLiteral("m3u") || suffix == QStringLiteral("m3u8"))) {
+			if (IsLocalHlsPlaylist(file)) {
+				MixishPlaylistItem item;
+				item.path = info.absoluteFilePath();
+				item.name = info.fileName();
+				item.duration = -1.0;
+				item.missing = !QFileInfo::exists(item.path);
+				item.stream = true;
+				items.push_back(item);
+				continue;
+			}
+
 			const QVector<MixishPlaylistItem> parsed = ParseQueueFile(file);
 			if (!parsed.isEmpty()) {
 				items += parsed;

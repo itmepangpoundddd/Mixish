@@ -483,6 +483,11 @@ bool MixishPlaylistController::SwitchTo(int index, bool autoPlay)
 	if (item.missing)
 		item.missing = false;
 
+	/* Every switch starts a new stream attempt, so a pending error check
+	 * from the previous item must not apply to this one. */
+	item.streamError = false;
+	const int checkToken = ++streamToken;
+
 	if (autoPlay && gapStartNs == 0) {
 		gapStartNs = os_gettime_ns();
 		gapFromEnd = false;
@@ -512,6 +517,10 @@ bool MixishPlaylistController::SwitchTo(int index, bool autoPlay)
 	} else {
 		obs_data_set_bool(settings, "is_local_file", true);
 		obs_data_set_string(settings, "local_file", item.path.toUtf8().constData());
+		/* A local HLS playlist is a file, but FFmpeg still has to detect
+		 * the container itself. */
+		if (item.stream)
+			obs_data_set_string(settings, "input_format", "");
 	}
 
 	obs_source_update(media.Get(), settings);
@@ -522,6 +531,28 @@ bool MixishPlaylistController::SwitchTo(int index, bool autoPlay)
 			obs_source_media_play_pause(media.Get(), false);
 		else if (state != OBS_MEDIA_STATE_PLAYING)
 			obs_source_media_restart(media.Get());
+	}
+
+	if (autoPlay && item.stream) {
+		const QString streamPath = item.path;
+		QTimer::singleShot(2000, this, [this, checkToken, index, streamPath]() {
+			if (streamToken != checkToken || index < 0 || index >= items.size())
+				return;
+			MixishPlaylistItem &streamItem = items[index];
+			if (!streamItem.stream || streamItem.path != streamPath ||
+			    streamItem.streamError)
+				return;
+			if (!media ||
+			    obs_source_media_get_state(media.Get()) != OBS_MEDIA_STATE_ERROR)
+				return;
+
+			streamItem.streamError = true;
+			blog(LOG_WARNING, "Mixish playlist: stream error for '%s'",
+			     streamPath.toUtf8().constData());
+			emit Changed();
+			if (manager)
+				manager->ControllerChanged();
+		});
 	}
 
 	emit CurrentChanged(index);
@@ -654,6 +685,8 @@ void MixishPlaylistController::ReplaceItem(int index, const MixishPlaylistItem &
 		return;
 
 	items[index] = item;
+	items[index].streamError = false;
+	++streamToken;
 
 	if (index == current && media) {
 		if (obs_source_showing(media.Get()))
@@ -712,6 +745,7 @@ void MixishPlaylistController::Save(obs_data_t *data) const
 		obs_data_set_string(itemData, "path", item.path.toUtf8().constData());
 		obs_data_set_string(itemData, "name", item.name.toUtf8().constData());
 		obs_data_set_bool(itemData, "enabled", item.enabled);
+		obs_data_set_bool(itemData, "stream", item.stream);
 		if (item.duration >= 0.0)
 			obs_data_set_double(itemData, "duration", item.duration);
 		obs_data_array_push_back(list, itemData);

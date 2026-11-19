@@ -5,6 +5,16 @@ OBS Studio is licensed under GPL-2.0-or-later. Mixish keeps all original OBS
 copyright and license notices, and adds Mixish copyright notices only to new or
 modified work.
 
+## 0.0.3 work in progress
+
+### Playlist HLS passthrough
+
+- `MixishPlaylistManager.cpp` - a local `.m3u`/`.m3u8` whose first 64 KB contains a `#EXT-X-` tag is now treated as a real HLS playlist and added to the queue as **one** item (`stream = true`) instead of being expanded into separate segment entries. Remote `.m3u`/`.m3u8` URLs are added as a single stream item without fetching them. Mixish queue files (only `#EXTM3U`/`#EXTINF`) still expand exactly as in 0.0.2.
+- `MixishPlaylistController.cpp` / `.hpp` - stream items keep the existing native media-source path (local file or URL) with format auto-detection; duration probing, `RecheckItems` and the background probe skip stream items. A 2 s post-start check marks an item `streamError` when the media source reports `OBS_MEDIA_STATE_ERROR`; the flag is transient and never saved.
+- `MixishPlaylistPanel.cpp` / `.hpp` - duration column shows `LIVE` for streams and `ERROR` (error color) for a failed stream, and a new `Add URL…` button accepts http/https HLS URLs.
+- Persistence: new optional `stream` bool per queue item; missing key loads as `false`, so 0.0.2 scene collections are unchanged.
+- Build: `build_x64_local\frontend\obs-studio.vcxproj` RelWithDebInfo x64 compiles and links cleanly. Runtime verification (local HLS VOD, live URL, queue file, bad URL, restart) is still pending.
+
 ## Release 0.0.2
 
 - Version bumped from `0.0.1` to `0.0.2` in `README.md`, `README.rst` and `installer/mixish.iss` (AppVersion, AppVerName, output filename and VersionInfoVersion).
