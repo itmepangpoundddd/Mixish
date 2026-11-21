@@ -11,7 +11,7 @@ modified work.
 - Release contents: the PlayList queue panel tab and the PlayList manager window, the split Record/Stream buttons, the input transport end-of-item warning (red seek bar and timecode), the Program transport removed so the Program monitor keeps its full height, the program VU meter beside the transition column, five overlay channels with an All On/Off switch, HLS passthrough as a single stream item, and the shutdown source-leak crash fix. Per-file details follow in the sections below.
 - `RELEASE_NOTES.md` - release notes for GitHub Releases.
 - Installer: `G:\Mixish\dist\Mixish-Setup-0.0.3-x64.exe` (Inno Setup 7, `"C:\Program Files\Inno Setup 7\ISCC.exe" installer\mixish.iss`).
-- Installer size INSTALLER_SIZE_PLACEHOLDER; SHA-256 `INSTALLER_SHA_PLACEHOLDER`.
+- Installer size 155,893,971 bytes; SHA-256 `2965566507fce57e6904414603e7f7c6cbc3bc8b683f9a7b2d0013215abf2d28`.
 - Built binaries report `0.0.3` (`CMAKE_PROJECT_VERSION` / `OBS_VERSION` from the v0.0.3 tag).
 - Tag: `v0.0.3`, published as a GitHub Release with the installer and its checksum attached.
 
