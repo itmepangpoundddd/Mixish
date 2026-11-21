@@ -48,14 +48,13 @@ private:
 	QToolButton *addInputButton = nullptr;
 	QMenu *addInputMenu = nullptr;
 
+	QPushButton *playlistButton = nullptr;
+
 	QToolButton *recordSettingsButton = nullptr;
 	QPushButton *recordButton = nullptr;
 
 	QToolButton *streamSettingsButton = nullptr;
-	QToolButton *streamButton = nullptr;
-	QMenu *streamMenu = nullptr;
-	QAction *streamSettingsAction = nullptr;
-	QAction *stopStreamAction = nullptr;
+	QPushButton *streamButton = nullptr;
 
 	QTimer *stateTimer = nullptr;
 	QElapsedTimer recordClock;

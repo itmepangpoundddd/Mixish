@@ -81,19 +81,15 @@ MixishOverlayStrip::MixishOverlayStrip(MixishSwitcher *switcher_, QWidget *paren
 
 	outer->addLayout(row);
 
-	allOffButton = new QPushButton(tr("All Off"), this);
-	allOffButton->setObjectName(QStringLiteral("mixishOverlayAllOff"));
-	MixishTheme::SetVariant(allOffButton, "secondary");
-	allOffButton->setFixedHeight(MixishTheme::CompactHeight);
-	allOffButton->setFocusPolicy(Qt::NoFocus);
-	allOffButton->setToolTip(tr("Turn every overlay channel off"));
-	connect(allOffButton, &QPushButton::clicked, this, [this]() {
-		if (MixishOverlayController *overlays = switcher->GetOverlays())
-			overlays->AllOff();
-	});
+	allButton = new QPushButton(tr("All Off"), this);
+	allButton->setObjectName(QStringLiteral("mixishOverlayAll"));
+	MixishTheme::SetVariant(allButton, "secondary");
+	allButton->setFixedHeight(MixishTheme::CompactHeight);
+	allButton->setFocusPolicy(Qt::NoFocus);
+	connect(allButton, &QPushButton::clicked, this, &MixishOverlayStrip::OnAllClicked);
 	/* Kept in the header row so the strip stays compact and the transition
 	 * column never needs to scroll for it. */
-	titleRow->insertWidget(titleRow->count() - 1, allOffButton);
+	titleRow->insertWidget(titleRow->count() - 1, allButton);
 
 	connect(switcher, &MixishSwitcher::OverlaysChanged, this, &MixishOverlayStrip::Refresh);
 
@@ -128,6 +124,47 @@ void MixishOverlayStrip::Refresh()
 						   .arg(MixishOverlayController::ChannelTitle(i)));
 		}
 	}
+
+	if (allButton) {
+		/* One button: it turns everything off while anything is on air, and
+		 * turns every assigned channel on when nothing is. */
+		const bool anyOnAir = AnyOnAir();
+		allButton->setText(anyOnAir ? tr("All Off") : tr("All On"));
+		allButton->setToolTip(anyOnAir
+					      ? tr("Turn every overlay channel off")
+					      : tr("Turn every assigned overlay channel on"));
+
+		bool anyAssigned = false;
+		for (int i = 0; i < overlays->ChannelCount() && !anyAssigned; ++i)
+			anyAssigned = overlays->IsAssigned(i);
+		allButton->setEnabled(anyAssigned);
+	}
+}
+
+bool MixishOverlayStrip::AnyOnAir() const
+{
+	MixishOverlayController *overlays = switcher ? switcher->GetOverlays() : nullptr;
+	if (!overlays)
+		return false;
+
+	for (int i = 0; i < overlays->ChannelCount(); ++i) {
+		if (overlays->IsAssigned(i) && overlays->IsOnAir(i))
+			return true;
+	}
+
+	return false;
+}
+
+void MixishOverlayStrip::OnAllClicked()
+{
+	MixishOverlayController *overlays = switcher->GetOverlays();
+	if (!overlays)
+		return;
+
+	if (AnyOnAir())
+		overlays->AllOff();
+	else
+		overlays->AllOn();
 }
 
 void MixishOverlayStrip::OnChannelClicked(int index)

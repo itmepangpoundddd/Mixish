@@ -1,81 +1,102 @@
-# Mixish 0.0.2
+# Mixish 0.0.3
 
-Released 2026-11-16 · [All changes](CHANGES.md)
+Released 2026-11-21 · [All changes](CHANGES.md)
 
-Second public build of Mixish, a live production switcher built on OBS Studio.
-This release adds the Playlist input, fixes media playback during transitions,
-and gives the app a proper startup splash.
+Third public build of Mixish, a live production switcher built on OBS Studio.
+This release turns the Playlist input into a real rundown: a queue panel next
+to the Audio Mixer, a PlayList manager window on the bottom bar, and end-of-item
+warning on the input transport. It also fixes the crash on exit that 0.0.1 and
+0.0.2 could hit at shutdown.
 
 ## Highlights
 
-### Playlist input
-- New **Playlist** source type in Add Input, directly below Media.
-- Build a queue from multiple files or an `.m3u` / `.m3u8` list. `#EXTINF`
-  titles and durations are read from the list; unknown durations are probed in
-  the background and cached with the scene collection.
-- New **Playlist** tab next to Audio Mixer: item list with availability and
-  duration, Add / Edit / Remove, Play Out, Auto Next, Auto First and Loop.
-- Missing files are skipped, the last frame is held at the end of the queue,
-  queue order / current item / durations survive a restart.
-- Playback uses a native OBS media source; no VLC or extra runtime is required.
+### PlayList: rundown panel and manager window
 
-### Program transport
-- The transport widget under Program shows the active Playlist position and the
-  next item, and drives previous/next and play/pause on Program.
-- The INPUTS transport and the Program transport are one shared widget
-  (`MixishMediaTransport`), not two implementations.
+- New **List** tab next to **Audio Mixer** in the INPUTS header. It edits the
+  queue of the selected Playlist input: playlists, `Add` / `Add URL…` / `Edit` /
+  `Remove`, reorder with `▲` / `▼`, `Play Out`, `Stop` / `Previous` / `Next`,
+  `Auto Next` / `Auto First` / `Loop`. The tab is only enabled while a Playlist
+  input is selected and closes when the selection moves away.
+- New **PlayList** button on the bottom bar, next to Record, opens the PlayList
+  manager window: a playlist combo with `New PlayList` / `Delete PlayList`,
+  `Available Inputs` on the left, the queue on the right, `Loop` / `Begin from
+  selected item` / `Manual Mode`, and the transport. Queue entries are inputs
+  (stored by UUID); playing one cuts it to Program, and unless `Manual Mode` is
+  set the manager advances when the running media reports the end.
+- Lists and options persist with the scene collection.
 
-### Media playback fixed for transitions
-- A media input no longer pauses or deactivates when a Fade takes it off
-  Program; it keeps playing until the fade has finished.
-- Coming back on air resumes from the held frame, never from 00:00.
-- Selecting a media input in Preview does not start playback.
-- Autoplay that OBS triggers while loading a scene collection is parked once;
-  an intentional play (transport, hotkey, websocket) is respected.
-- New **Playback** group in Input Properties with the three vMix-style options:
-  `Automatically play with transition` (on), `Automatically restart with
-  transition` (off), `Automatically pause after transition` (on). `Defaults`
-  restores exactly those values. Settings persist with the scene collection.
+### Input transport: end-of-item warning and program VU meter
 
-### Startup splash
-- 480×300 Mixish splash with wordmark, tagline, accent progress sweep, live
-  status and the app version, drawn from the Mixish design tokens.
-- Shown before the main window exists, stays at least 1.1 s, fades out in 220 ms
-  once the main window is on screen.
+- When a clip has 10 s or less left, the seek bar under the INPUT monitor and
+  both timecodes turn red, so the operator sees the item running out.
+- The transport row under the Program monitor is gone; the Program monitor
+  keeps the full height. The queue still advances on end-of-item and is driven
+  from the playout panel or the PlayList manager.
+- A narrow vertical VU meter sits to the right of the transition column and
+  follows the program mix at 50 ms, so the level is readable without opening
+  the Audio Mixer.
 
-### Input and Add Input fixes
-- **Del** on an input now also removes the auto-created empty scene behind it,
-  so the tile disappears instead of leaving a stale empty scene.
-- Playlist sits directly below Media in the Add Input type list.
+### Overlays: five channels and an All On/Off switch
+
+- A fifth overlay channel (`#E55C73`) joins the strip, editor panel and input
+  tile assignment buttons everywhere.
+- The strip header is now a single switch: `All Off` while any channel is on
+  air, `All On` when nothing is.
+
+### Playlist HLS passthrough
+
+- A `.m3u` / `.m3u8` that contains an `#EXT-X-` tag is treated as a real HLS
+  playlist and added as **one** item instead of being expanded into segment
+  entries; remote HLS URLs can be added with `Add URL…`. The queue list shows
+  `LIVE` for a stream and `ERROR` when it produced no frames after 2.5 s.
+- Mixish queue files (only `#EXTM3U` / `#EXTINF`) still expand exactly as in
+  0.0.2.
+
+### Record and Stream buttons
+
+- Record and Stream are split buttons shaped like `Add Input`: the text action
+  is welded to a trailing gear that opens the recording / streaming settings
+  directly.
 
 ### Stability
-- Fixed an OBS `ThumbnailManager` crash when a source was destroyed while its
-  UUID was still queued for a thumbnail update.
+
+- Fixed the intermittent crash on exit caused by leaked private sources: the
+  playlist duration probe and the overlay fade transitions are now private and
+  release their creation reference, and the switcher stops touching libobs once
+  teardown has started. 25 consecutive close cycles were clean, with 0 orphan
+  sources and 0 `Double destroy` logs.
 
 ## Known limitations
 
-- Playlist switching is not gapless yet: v1 replaces the file in one media
-  source (measured 1.9–19.4 ms gaps on the test machine). Dual-source
-  preloading is planned for v2.
-- `.m3u` / `.m3u8` files are treated as Mixish queue lists; a true HLS playlist
-  is expanded into its segment entries rather than streamed as one item.
+- Playlist switching is still not gapless: v1 replaces the file in one media
+  source (measured 1.9–19.4 ms gaps on the test machine).
+- An audio-only HLS stream, which has no video size, is shown as `ERROR` while
+  its audio plays.
+- Importing an existing Mixish queue file (`.m3u` with only `#EXTM3U` /
+  `#EXTINF`) still goes through the Add-file dialog and was not re-verified for
+  0.0.3.
 - The installer is not code-signed, so Windows SmartScreen may show
   "Unknown publisher".
 - Settings still live in OBS's `%APPDATA%\obs-studio` folder.
 
 ## Install
 
-Download `Mixish-Setup-0.0.2-x64.exe` below and run it. A SHA-256 file for the
+Download `Mixish-Setup-0.0.3-x64.exe` below and run it. A SHA-256 file for the
 installer is published next to it. Uninstalling leaves user data in place.
+Installing over 0.0.2 keeps the existing scene collections and settings.
 
 ## Verification
 
-- Build: RelWithDebInfo x64, `obs-studio.vcxproj`.
-- Playlist, media semantics, playback options and the splash were verified at
-  1366×768 with screenshots and native OBS media status; details are in
+- Build: RelWithDebInfo x64, `obs-studio.vcxproj`, configured with
+  `OBS_VERSION_OVERRIDE=0.0.3`; the built `obs.dll` reports `0.0.3`.
+- Playlist panel, PlayList manager window, split Record/Stream buttons, the
+  end-of-item warning, the program VU meter, the fifth overlay channel and the
+  All On/Off switch were checked in the running app; details are in
   `CHANGES.md`.
-- 10× close test on this build (only `WM_CLOSE`, no mouse/keyboard automation):
-  **10/10 clean exits, 0 new crash files**.
+- HLS passthrough was verified against a local HLS VOD, a sliding-window LIVE
+  playlist and a 404 URL, with a program recording proving decoded frames.
+- 25× close test on this build (only `WM_CLOSE`, no mouse/keyboard automation):
+  **25/25 clean exits, 0 new crash files**.
 
 ## License
 
@@ -86,13 +107,17 @@ original OBS Studio copyright and license notices are kept; see `COPYING`.
 
 ## สรุปภาษาไทย
 
-- เพิ่มอินพุต **Playlist** สร้างคิวจากไฟล์หลายไฟล์หรือ `.m3u`/`.m3u8`
-  มีแท็บ Playlist ข้าง Audio Mixer (เพิ่ม/แก้ไข/ลบ, Play Out, Auto Next,
-  Auto First, Loop) และคิวคงอยู่หลังรีสตาร์ท
-- เพิ่มแถบควบคุมใต้จอ Program สำหรับ Playlist ที่ออกอากาศอยู่
-- แก้พฤติกรรมมีเดียตอนเปลี่ยนฉาก: ไม่ตัด/ไม่หยุดกลาง Fade, กลับมาออกอากาศต่อ
-  จากเฟรมเดิม, ไม่เล่นเองใน Preview และมีตัวเลือกแบบ vMix 3 ข้อในหน้า Properties
-- เพิ่มหน้า **Splash** สวย ๆ ตอนเปิดโปรแกรม
-- ปุ่ม Del ลบซีนว่างที่สร้างอัตโนมัติให้ด้วย และแก้ crash ของ ThumbnailManager
-- ข้อจำกัด: Playlist ยังเปลี่ยนไฟล์แบบไม่มีช่องว่างไม่ได้ (1.9–19.4 ms),
-  ตัวติดตั้งยังไม่เซ็นชื่อ (SmartScreen อาจเตือน)
+- แท็บ **List** ข้าง Audio Mixer สำหรับแก้คิวของ Playlist ที่เลือก และปุ่ม
+  **PlayList** บนแถบล่างเปิดหน้าต่างจัดการคิว (สร้าง/ลบเพลย์ลิสต์, เพิ่ม/ลบ,
+  จัดลำดับ, Loop, Manual Mode) — คิวคงอยู่หลังรีสตาร์ท
+- แถบ seek ใต้จอ INPUT และ Timecode เปลี่ยนเป็น **สีแดง** เมื่อคลิปเหลือ ≤10 วิ
+  และมีหลอด **VU แนวตั้ง** ข้างแถบ Transition ดูระดับเสียง Program ได้โดยไม่ต้อง
+  เปิด Audio Mixer
+- ลบแถบ transport ใต้จอ **PROGRAM** ออก จอ Program ได้ความสูงเต็ม
+- Overlay เพิ่มช่องที่ 5 และปุ่มสลับ **All On / All Off** ในแถบ header
+- `.m3u`/`.m3u8` ที่เป็น HLS จริงถูกเพิ่มเป็นรายการเดียว (LIVE / ERROR) และเพิ่ม
+  URL ได้จากปุ่ม `Add URL…`
+- ปุ่ม Record และ Stream เป็น split button มีเฟืองเปิดหน้าตั้งค่าตรง ๆ
+- แก้ crash ตอนปิดโปรแกรมจาก source ที่หลุด reference (ทดสอบปิด 25 รอบ ไม่มี crash)
+- ข้อจำกัด: Playlist ยังเปลี่ยนไฟล์แบบไร้ช่องว่างไม่ได้, HLS ที่มีแต่เสียงจะขึ้น
+  ERROR, ตัวติดตั้งยังไม่เซ็นชื่อ (SmartScreen อาจเตือน)

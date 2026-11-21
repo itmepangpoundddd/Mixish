@@ -18,21 +18,97 @@
 #pragma once
 
 #include <QFrame>
+#include <QHash>
+#include <QPair>
 #include <QPointer>
+#include <QString>
+#include <QVector>
+
+#include <obs.hpp>
 
 class MixishPlaylistController;
 class MixishPlaylistManager;
 class MixishSwitcher;
+class QCheckBox;
 class QComboBox;
 class QListWidget;
 class QListWidgetItem;
 class QPushButton;
+class QTimer;
+
+/* Playlist manager: a window where a queue is built out of the collection's
+ * inputs. Left side lists every input, the right side is the queue; the
+ * queue is played by cutting each input to Program and advances on its own
+ * when the running item's media ends (unless Manual Mode is on). */
+class MixishPlaylistWindow : public QFrame {
+	Q_OBJECT
+
+public:
+	MixishPlaylistWindow(MixishSwitcher *switcher, obs_data_t *storage,
+			     QWidget *parent = nullptr);
+
+	void Refresh();
+
+private:
+	struct Entry {
+		QString uuid;
+		QString label;
+	};
+
+	void Load();
+	void Save();
+	void SetActive(const QString &name);
+	void ApplyName();
+	void RefreshAvailable();
+	void RefreshQueue();
+	void UpdateButtons();
+	void NewList();
+	void DeleteList();
+	void AddSelected();
+	void RemoveSelected();
+	void MoveSelected(int delta);
+	void PlayIndex(int index, bool restart);
+	void PlayNext();
+	void PlayPrevious();
+	void StopPlayback();
+	void CheckAutoAdvance();
+	void ClearOverlayChannels();
+	OBSScene SceneForEntry(const Entry &entry) const;
+	int QueueSelection() const;
+	QVector<Entry> &ActiveQueue();
+
+	MixishSwitcher *switcher = nullptr;
+	OBSDataAutoRelease storageData;
+	QHash<QString, QVector<Entry>> queues;
+	QString activeName;
+	int current = -1;
+	OBSWeakSource playing;
+
+	QPushButton *newButton = nullptr;
+	QPushButton *deleteButton = nullptr;
+	QComboBox *nameCombo = nullptr;
+	QListWidget *availableList = nullptr;
+	QListWidget *queueList = nullptr;
+	QPushButton *addButton = nullptr;
+	QPushButton *removeButton = nullptr;
+	QPushButton *upButton = nullptr;
+	QPushButton *downButton = nullptr;
+	QCheckBox *loopCheck = nullptr;
+	QCheckBox *beginCheck = nullptr;
+	QCheckBox *clearOverlayCheck = nullptr;
+	QCheckBox *manualCheck = nullptr;
+	QPushButton *stopButton = nullptr;
+	QPushButton *prevButton = nullptr;
+	QPushButton *nextButton = nullptr;
+	QPushButton *closeButton = nullptr;
+	QTimer *advanceTimer = nullptr;
+};
 
 /* Queue editor for the selected Playlist input.
  *
- * Opens as a tab next to the Audio Mixer. The panel edits the same
- * MixishPlaylistController used by Program playback; it does not own a second
- * queue or a second media source. */
+ * It runs in its own window, opened from the PlayList button in the INPUTS
+ * header, and edits the same MixishPlaylistController used by Program
+ * playback; it does not own a second queue or a second media source. */
 class MixishPlaylistPanel : public QFrame {
 	Q_OBJECT
 
@@ -49,24 +125,37 @@ private:
 	void UpdateButtons();
 	int SelectedIndex() const;
 
+	void NewPlaylist();
+	void DeletePlaylist();
 	void AddItems();
 	void AddUrl();
 	void EditItem();
 	void RemoveItems();
+	void MoveSelected(int delta);
 	void PlayOut();
 	void PlaySelected(QListWidgetItem *item);
+	void StopPlayback();
+	void PlayPreviousItem();
+	void PlayNextItem();
 
 	MixishSwitcher *switcher = nullptr;
 	MixishPlaylistManager *manager = nullptr;
 	QPointer<MixishPlaylistController> controller;
 
 	QComboBox *playlistCombo = nullptr;
+	QPushButton *newButton = nullptr;
+	QPushButton *deleteButton = nullptr;
 	QListWidget *list = nullptr;
 	QPushButton *addButton = nullptr;
 	QPushButton *addUrlButton = nullptr;
 	QPushButton *editButton = nullptr;
 	QPushButton *removeButton = nullptr;
+	QPushButton *upButton = nullptr;
+	QPushButton *downButton = nullptr;
 	QPushButton *playOutButton = nullptr;
+	QPushButton *stopButton = nullptr;
+	QPushButton *prevButton = nullptr;
+	QPushButton *nextButton = nullptr;
 	QPushButton *autoNextButton = nullptr;
 	QPushButton *autoFirstButton = nullptr;
 	QPushButton *loopButton = nullptr;

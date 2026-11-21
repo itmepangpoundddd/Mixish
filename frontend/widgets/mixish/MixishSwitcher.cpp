@@ -21,10 +21,8 @@
 #include "MixishSwitcher.hpp"
 #include "MixishTheme.hpp"
 #include "MixishInputTile.hpp"
-#include "MixishPlaylistController.hpp"
 #include "MixishPlaylistManager.hpp"
 #include "MixishMediaTransport.hpp"
-#include "MixishProgramTransport.hpp"
 #include "MixishTopBar.hpp"
 #include "MixishTransitionPanel.hpp"
 #include "MixishVideoControls.hpp"
@@ -175,11 +173,6 @@ void MixishSwitcher::PrepareForShutdown()
 
 	/* Drop tile references and tear the overlay stages down while libobs is
 	 * still fully alive. ClearSceneData runs right after this event. */
-	if (programTransport) {
-		programTransport->SetSource(nullptr);
-		programTransport->SetQueueInfo(QString());
-	}
-	programPlaylist = nullptr;
 
 	if (playlistManager)
 		playlistManager->PrepareForShutdown();
@@ -208,11 +201,6 @@ void MixishSwitcher::PrepareForSceneCollectionChange()
 	ReleaseMediaHolds();
 	UnhookSceneItemSignals();
 
-	if (programTransport) {
-		programTransport->SetSource(nullptr);
-		programTransport->SetQueueInfo(QString());
-	}
-	programPlaylist = nullptr;
 
 	if (playlistManager)
 		playlistManager->PrepareForSceneCollectionChange();
@@ -389,9 +377,6 @@ void MixishSwitcher::Sync()
 	if (main->programWidget)
 		SetTransitionColumnVisible(true);
 
-	EnsureProgramTransport();
-	UpdateProgramTransport();
-
 	if (playlistManager) {
 		OBSSource previewSource = main->GetCurrentSceneSource();
 		OBSSource programSource = main->GetProgramSource();
@@ -442,9 +427,6 @@ void MixishSwitcher::SetMixishLayout(bool enabled, bool persist)
 
 		SetTransitionColumnVisible(true);
 		SetInputBarVisible(true);
-		EnsureProgramTransport();
-		if (programTransport)
-			programTransport->show();
 		if (bottomBar)
 			bottomBar->show();
 		if (mainSplitter)
@@ -462,8 +444,6 @@ void MixishSwitcher::SetMixishLayout(bool enabled, bool persist)
 
 		SetTransitionColumnVisible(false);
 		SetInputBarVisible(false);
-		if (programTransport)
-			programTransport->hide();
 		if (dockStateCaptured)
 			ApplyDockState();
 		ClearHeaderOverrides();
@@ -484,71 +464,6 @@ void MixishSwitcher::SetMixishLayout(bool enabled, bool persist)
 		config_set_bool(App()->GetUserConfig(), "BasicWindow", "MixishLayout", mixishMode);
 		config_save_safe(App()->GetUserConfig(), "tmp", nullptr);
 	}
-}
-
-void MixishSwitcher::EnsureProgramTransport()
-{
-	if (programTransport || !main->programWidget || !main->programLayout)
-		return;
-
-	/* The transport is a child of programWidget, which OBS deletes when
-	 * Studio Mode is disabled. Recreate it with the next Program widget. */
-	programPlaylist = nullptr;
-
-	auto *transport = new MixishProgramTransport(main->programWidget);
-	programTransport = transport;
-	main->programLayout->addWidget(transport);
-
-	connect(transport, &MixishProgramTransport::previousRequested, this, [this]() {
-		if (programPlaylist)
-			programPlaylist->PlayPrevious();
-	});
-	connect(transport, &MixishProgramTransport::nextRequested, this, [this]() {
-		if (programPlaylist)
-			programPlaylist->PlayNext();
-	});
-
-	if (transport->Transport())
-		connect(transport->Transport(), &MixishMediaTransport::playRequested, this,
-			&MixishSwitcher::MarkUserPlayback);
-
-	if (!mixishMode)
-		transport->hide();
-}
-
-void MixishSwitcher::UpdateProgramTransport()
-{
-	if (!programTransport || !mixishMode)
-		return;
-
-	OBSSource programSource = main->GetProgramSource();
-	MixishPlaylistController *controller =
-		(playlistManager && programSource) ? playlistManager->FindByScene(programSource.Get())
-						   : nullptr;
-
-	if (controller != programPlaylist ||
-	    (controller && !programTransport->HasSource())) {
-		programPlaylist = controller;
-		programTransport->SetSource(controller ? controller->MediaSource() : nullptr);
-	}
-
-	if (!controller) {
-		programTransport->SetQueueInfo(QString());
-		return;
-	}
-
-	const int index = controller->CurrentIndex();
-	const int count = controller->Items().size();
-	QString info = tr("%1  ·  %2/%3")
-			       .arg(QString::fromUtf8(obs_source_get_name(programSource.Get())))
-			       .arg(index >= 0 ? index + 1 : 0)
-			       .arg(count);
-
-	const QString next = controller->NextUpName();
-	if (!next.isEmpty())
-		info += tr("  ·  Next: %1").arg(next);
-
-	programTransport->SetQueueInfo(info);
 }
 
 void MixishSwitcher::SetTransitionColumnVisible(bool visible)
@@ -958,7 +873,7 @@ bool SceneContainsSource(obs_scene_t *scene, obs_source_t *needle, int depth = 0
 
 } // namespace
 
-void MixishSwitcher::DeleteScene(OBSScene scene)
+void MixishSwitcher::DeleteScene(OBSScene scene, bool ask)
 {
 	if (!scene)
 		return;
@@ -987,53 +902,62 @@ void MixishSwitcher::DeleteScene(OBSScene scene)
 	 * contain this input as a layer. */
 	QStringList uses;
 
-	if (overlayController) {
-		for (int i = 0; i < overlayController->ChannelCount(); ++i) {
-			OBSSource assigned = overlayController->InputSource(i);
-			if (!assigned)
-				continue;
-			if (assigned == sceneSource.Get()) {
-				uses << tr("overlay OV%1").arg(i + 1);
-			} else if (obs_scene_t *assignedScene = obs_scene_from_source(assigned)) {
-				if (SceneContainsSource(assignedScene, sceneSource.Get(), 1))
+	if (ask) {
+		if (overlayController) {
+			for (int i = 0; i < overlayController->ChannelCount(); ++i) {
+				OBSSource assigned = overlayController->InputSource(i);
+				if (!assigned)
+					continue;
+				if (assigned == sceneSource.Get()) {
 					uses << tr("overlay OV%1").arg(i + 1);
+				} else if (obs_scene_t *assignedScene =
+						   obs_scene_from_source(assigned)) {
+					if (SceneContainsSource(assignedScene, sceneSource.Get(), 1))
+						uses << tr("overlay OV%1").arg(i + 1);
+				}
 			}
+		}
+
+		for (int i = 0; i < sceneList->count(); ++i) {
+			QListWidgetItem *item = sceneList->item(i);
+			if (!item)
+				continue;
+			OBSScene other = GetOBSRef<OBSScene>(item);
+			if (!other || other == scene)
+				continue;
+			if (SceneContainsSource(other, sceneSource.Get(), 0))
+				uses << tr("layer in \"%1\"")
+						.arg(QString::fromUtf8(
+							obs_source_get_name(obs_scene_get_source(other))));
 		}
 	}
 
-	for (int i = 0; i < sceneList->count(); ++i) {
-		QListWidgetItem *item = sceneList->item(i);
-		if (!item)
-			continue;
-		OBSScene other = GetOBSRef<OBSScene>(item);
-		if (!other || other == scene)
-			continue;
-		if (SceneContainsSource(other, sceneSource.Get(), 0))
-			uses << tr("layer in \"%1\"")
-					.arg(QString::fromUtf8(obs_source_get_name(obs_scene_get_source(other))));
+	if (ask) {
+		const QString name = QString::fromUtf8(obs_source_get_name(sceneSource));
+
+		QMessageBox confirm(main);
+		confirm.setIcon(QMessageBox::Warning);
+		confirm.setWindowTitle(tr("Delete Input"));
+		confirm.setText(tr("Delete \"%1\"?").arg(name));
+
+		QString detail;
+		if (!uses.isEmpty())
+			detail = tr("This input is currently used as: %1.\n\n")
+				 .arg(uses.join(QStringLiteral(", ")));
+		detail += tr("The input and its sources will be removed from the scene collection.");
+		confirm.setInformativeText(detail);
+
+		QPushButton *deleteButton =
+			confirm.addButton(tr("Delete"), QMessageBox::DestructiveRole);
+		QPushButton *cancelButton =
+			confirm.addButton(tr("No"), QMessageBox::RejectRole);
+		confirm.setDefaultButton(cancelButton);
+		confirm.setEscapeButton(cancelButton);
+		confirm.exec();
+
+		if (confirm.clickedButton() != deleteButton)
+			return;
 	}
-
-	const QString name = QString::fromUtf8(obs_source_get_name(sceneSource));
-
-	QMessageBox confirm(main);
-	confirm.setIcon(QMessageBox::Warning);
-	confirm.setWindowTitle(tr("Delete Input"));
-	confirm.setText(tr("Delete \"%1\"?").arg(name));
-
-	QString detail;
-	if (!uses.isEmpty())
-		detail = tr("This input is currently used as: %1.\n\n").arg(uses.join(QStringLiteral(", ")));
-	detail += tr("The input and its sources will be removed from the scene collection.");
-	confirm.setInformativeText(detail);
-
-	QPushButton *deleteButton = confirm.addButton(tr("Delete"), QMessageBox::DestructiveRole);
-	QPushButton *cancelButton = confirm.addButton(tr("No"), QMessageBox::RejectRole);
-	confirm.setDefaultButton(cancelButton);
-	confirm.setEscapeButton(cancelButton);
-	confirm.exec();
-
-	if (confirm.clickedButton() != deleteButton)
-		return;
 
 	/* Release overlay channels that used this input before the source goes
 	 * away, so no stage keeps a reference to a removed scene. */

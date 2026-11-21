@@ -30,6 +30,7 @@
 #include <QIcon>
 #include <QLabel>
 #include <QLayoutItem>
+#include <QPainter>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -43,6 +44,160 @@
 #include "moc_MixishTransitionPanel.cpp"
 
 #include <algorithm>
+#include <cmath>
+
+namespace {
+
+constexpr float MeterMinDb = -60.0f;
+constexpr float MeterWarningDb = -12.0f;
+constexpr float MeterErrorDb = -3.0f;
+
+float MeterToDb(float peak)
+{
+	if (peak <= 0.0000001f)
+		return MeterMinDb;
+	const float db = 20.0f * std::log10(peak);
+	return std::max(MeterMinDb, std::min(0.0f, db));
+}
+
+/* libobs only renders sources when at least one output mix is connected, so
+ * the program meter needs a silent sink even if the audio mixer tab was never
+ * opened. The mixer connects its own sink; either one is enough. */
+void KeepProgramMixAlive(void *, size_t, struct audio_data *) {}
+
+void EnsureProgramMixAlive()
+{
+	static bool connected = false;
+	if (connected)
+		return;
+
+	audio_t *audio = obs_get_audio();
+	if (!audio)
+		return;
+
+	connected = audio_output_connect(audio, 0, nullptr, KeepProgramMixAlive, nullptr);
+}
+
+/* Narrow vertical program level meter shown beside the transition column.
+ * Stereo bars with green/yellow/red zones and a peak-hold line, drawn to
+ * match OBS's source meters. */
+class MixishVuMeter : public QWidget {
+public:
+	explicit MixishVuMeter(QWidget *parent) : QWidget(parent)
+	{
+		setObjectName(QStringLiteral("mixishTransitionMeter"));
+		setFixedWidth(18);
+		setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+		setMinimumHeight(80);
+
+		for (int i = 0; i < Channels; i++) {
+			displayDb[i] = MeterMinDb;
+			holdDb[i] = MeterMinDb;
+			holdUntil[i] = 0;
+		}
+	}
+
+	void SetLevels(float left, float right)
+	{
+		const float peaks[Channels] = {left, right};
+		const qint64 now = QDateTime::currentMSecsSinceEpoch();
+		bool changed = false;
+
+		for (int i = 0; i < Channels; i++) {
+			const float db = MeterToDb(peaks[i]);
+
+			/* Instant attack, gentle release. */
+			const float next = db > displayDb[i] ? db : std::max(db, displayDb[i] - 3.0f);
+			if (std::fabs(next - displayDb[i]) >= 0.05f)
+				changed = true;
+			displayDb[i] = next;
+
+			if (db >= holdDb[i]) {
+				holdDb[i] = db;
+				holdUntil[i] = now + 1500;
+				changed = true;
+			} else if (now >= holdUntil[i]) {
+				const float hold = std::max(db, holdDb[i] - 3.0f);
+				if (std::fabs(hold - holdDb[i]) >= 0.05f)
+					changed = true;
+				holdDb[i] = hold;
+			}
+		}
+
+		if (changed)
+			update();
+	}
+
+protected:
+	void paintEvent(QPaintEvent *) override
+	{
+		QPainter painter(this);
+
+		const int barWidth = 5;
+		const int barGap = 2;
+		const int barsWidth = Channels * barWidth + (Channels - 1) * barGap;
+		const int barLeft = (width() - barsWidth) / 2;
+
+		const int meterTop = 6;
+		const int meterHeight = std::max(1, height() - 12);
+
+		auto yForDb = [meterTop, meterHeight](float db) {
+			db = std::max(MeterMinDb, std::min(0.0f, db));
+			return meterTop + int(std::lround(-db * meterHeight / -MeterMinDb));
+		};
+
+		auto barRect = [&](int x, float fromDb, float toDb) {
+			const int top = yForDb(toDb);
+			const int bottom = yForDb(fromDb);
+			return QRect(x, top, barWidth, std::max(1, bottom - top));
+		};
+
+		const QColor bgGreen(0x14, 0x52, 0x26);
+		const QColor bgYellow(0x6E, 0x52, 0x0D);
+		const QColor bgRed(0x7D, 0x12, 0x24);
+		const QColor fgGreen(0x37, 0xD2, 0x47);
+		const QColor fgYellow(0xE8, 0xC1, 0x3A);
+		const QColor fgRed(0xE3, 0x3B, 0x57);
+		const QColor holdColor(0xE8, 0xE8, 0xE8);
+
+		for (int ch = 0; ch < Channels; ch++) {
+			const int x = barLeft + ch * (barWidth + barGap);
+
+			painter.fillRect(barRect(x, MeterMinDb, MeterWarningDb), bgGreen);
+			painter.fillRect(barRect(x, MeterWarningDb, MeterErrorDb), bgYellow);
+			painter.fillRect(barRect(x, MeterErrorDb, 0.0f), bgRed);
+
+			const float level = displayDb[ch];
+			if (level > MeterMinDb) {
+				const float greenTop = std::min(level, MeterWarningDb);
+				if (greenTop > MeterMinDb)
+					painter.fillRect(barRect(x, MeterMinDb, greenTop), fgGreen);
+
+				if (level > MeterWarningDb) {
+					const float yellowTop = std::min(level, MeterErrorDb);
+					painter.fillRect(barRect(x, MeterWarningDb, yellowTop), fgYellow);
+				}
+
+				if (level > MeterErrorDb)
+					painter.fillRect(barRect(x, MeterErrorDb, level), fgRed);
+			}
+
+			if (holdDb[ch] > MeterMinDb + 0.5f) {
+				const int y = yForDb(holdDb[ch]);
+				painter.fillRect(QRect(x, y, barWidth, 2), holdColor);
+			}
+		}
+	}
+
+private:
+	static constexpr int Channels = 2;
+
+	float displayDb[Channels];
+	float holdDb[Channels];
+	qint64 holdUntil[Channels];
+};
+
+} // namespace
 
 MixishTransitionPanel::MixishTransitionPanel(MixishSwitcher *switcher_, OBSBasic *main_, QWidget *parent)
 	: QFrame(parent),
@@ -51,15 +206,39 @@ MixishTransitionPanel::MixishTransitionPanel(MixishSwitcher *switcher_, OBSBasic
 {
 	setObjectName(QStringLiteral("mixishTransitionPanel"));
 	setAttribute(Qt::WA_StyledBackground, true);
-	setFixedWidth(232);
+	setFixedWidth(250);
 
 	/* The column is taller than a 768p screen once the overlay strip is
 	 * added. Keeping the content inside a scroll area gives the panel a
 	 * small minimum height so the monitor area and the bottom bar always
 	 * fit; on large screens nothing scrolls. */
-	auto *panelLayout = new QVBoxLayout(this);
+	auto *panelLayout = new QHBoxLayout(this);
 	panelLayout->setContentsMargins(0, 0, 0, 0);
 	panelLayout->setSpacing(0);
+
+	/* The transition controls keep their fixed width; the program VU meter
+	 * is a narrow strip beside them so the operator can read the audio level
+	 * without opening the mixer. */
+	auto *columnHost = new QWidget(this);
+	columnHost->setObjectName(QStringLiteral("mixishTransitionColumn"));
+	columnHost->setFixedWidth(232);
+	auto *columnLayout = new QVBoxLayout(columnHost);
+	columnLayout->setContentsMargins(0, 0, 0, 0);
+	columnLayout->setSpacing(0);
+	panelLayout->addWidget(columnHost);
+
+	auto *vuMeter = new MixishVuMeter(this);
+	vuMeter->setToolTip(tr("Program audio level"));
+	panelLayout->addWidget(vuMeter);
+
+	auto *meterTimer = new QTimer(this);
+	meterTimer->setInterval(50);
+	connect(meterTimer, &QTimer::timeout, this, [vuMeter]() {
+		EnsureProgramMixAlive();
+		vuMeter->SetLevels(obs_get_master_peak_channel(0),
+				    obs_get_master_peak_channel(1));
+	});
+	meterTimer->start();
 
 	auto *panelScroll = new QScrollArea(this);
 	panelScroll->setObjectName(QStringLiteral("mixishTransitionScroll"));
@@ -72,7 +251,7 @@ MixishTransitionPanel::MixishTransitionPanel(MixishSwitcher *switcher_, OBSBasic
 	auto *content = new QWidget(panelScroll);
 	content->setObjectName(QStringLiteral("mixishTransitionContent"));
 	panelScroll->setWidget(content);
-	panelLayout->addWidget(panelScroll);
+	columnLayout->addWidget(panelScroll);
 
 	/* The manual T-bar is pinned below the scrolling transition list so it
 	 * is always visible and reachable at 1366x768. */
@@ -84,7 +263,7 @@ MixishTransitionPanel::MixishTransitionPanel(MixishSwitcher *switcher_, OBSBasic
 	tBarLayout->setSpacing(0);
 	tBar = new MixishTBar(tBarHost);
 	tBarLayout->addWidget(tBar);
-	panelLayout->addWidget(tBarHost);
+	columnLayout->addWidget(tBarHost);
 
 	auto *outer = new QVBoxLayout(content);
 	outer->setContentsMargins(MixishTheme::Space2, MixishTheme::Space2,
@@ -161,7 +340,7 @@ MixishTransitionPanel::MixishTransitionPanel(MixishSwitcher *switcher_, OBSBasic
 	/* Overlay channel strip is pinned to the bottom of the column so the
 	 * overlay keys stay reachable even when the transition list scrolls. */
 	auto *overlayStrip = new MixishOverlayStrip(switcher, this);
-	panelLayout->addWidget(overlayStrip);
+	columnLayout->addWidget(overlayStrip);
 
 	auto *presetRow = new QHBoxLayout();
 	presetRow->setSpacing(MixishTheme::Space1);

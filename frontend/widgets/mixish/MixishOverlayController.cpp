@@ -34,6 +34,7 @@ const QColor kChannelColors[MixishOverlayController::MaxChannels] = {
 	QColor(0x39, 0xC7, 0x7A),
 	QColor(0xF2, 0xA9, 0x3B),
 	QColor(0xA9, 0x7B, 0xFF),
+	QColor(0xE5, 0x5C, 0x73),
 };
 
 struct ContainsSearch {
@@ -567,6 +568,14 @@ void MixishOverlayController::AllOff()
 	for (int i = 0; i < ActiveChannels; ++i) {
 		if (IsAssigned(i) && IsOnAir(i))
 			SetOnAir(i, false);
+	}
+}
+
+void MixishOverlayController::AllOn()
+{
+	for (int i = 0; i < ActiveChannels; ++i) {
+		if (IsAssigned(i) && !IsOnAir(i))
+			SetOnAir(i, true);
 	}
 }
 

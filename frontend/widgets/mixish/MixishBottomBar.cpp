@@ -16,6 +16,7 @@
 ******************************************************************************/
 
 #include "MixishBottomBar.hpp"
+#include "MixishInputBar.hpp"
 #include "MixishSwitcher.hpp"
 #include "MixishTheme.hpp"
 
@@ -26,13 +27,35 @@
 #include <QIcon>
 #include <QMenu>
 #include <QPushButton>
-#include <QSignalBlocker>
 #include <QTimer>
 #include <QToolButton>
 
 #include "moc_MixishBottomBar.cpp"
 
 #include <algorithm>
+
+/* Welds a text button and a trailing icon segment into one split control, so
+ * Record and Stream read as a single button with a gear, the same shape as the
+ * Add Input button with its dropdown. */
+static QFrame *MakeSplitGroup(QWidget *parent, QPushButton *button, QToolButton *segment)
+{
+	button->setProperty("mixishSplit", "start");
+	segment->setProperty("mixishSplit", "end");
+	MixishTheme::Repolish(button);
+	MixishTheme::Repolish(segment);
+
+	auto *group = new QFrame(parent);
+	group->setProperty("mixishSplit", "group");
+	MixishTheme::Repolish(group);
+
+	auto *groupLayout = new QHBoxLayout(group);
+	groupLayout->setContentsMargins(0, 0, 0, 0);
+	groupLayout->setSpacing(0);
+	groupLayout->addWidget(button);
+	groupLayout->addWidget(segment);
+
+	return group;
+}
 
 MixishBottomBar::MixishBottomBar(MixishSwitcher *switcher_, QWidget *parent)
 	: QFrame(parent), switcher(switcher_)
@@ -43,7 +66,8 @@ MixishBottomBar::MixishBottomBar(MixishSwitcher *switcher_, QWidget *parent)
 	auto *layout = new QHBoxLayout(this);
 	layout->setContentsMargins(MixishTheme::Space3, MixishTheme::Space1,
 				   MixishTheme::Space3, MixishTheme::Space1);
-	layout->setSpacing(MixishTheme::Space1);
+	/* One gap width for the whole bar, so the buttons read as a single row. */
+	layout->setSpacing(MixishTheme::Space4);
 
 	addInputButton = new QToolButton(this);
 	addInputButton->setObjectName(QStringLiteral("mixishAddInputButton"));
@@ -65,21 +89,20 @@ MixishBottomBar::MixishBottomBar(MixishSwitcher *switcher_, QWidget *parent)
 
 	layout->addStretch(1);
 
-	/* Record group: the gear configures the button immediately next to it. */
-	auto *recordGroup = new QHBoxLayout();
-	recordGroup->setSpacing(MixishTheme::Space1);
-
-	recordSettingsButton = new QToolButton(this);
-	recordSettingsButton->setObjectName(QStringLiteral("mixishRecordSettings"));
-	MixishTheme::SetVariant(recordSettingsButton, "icon");
-	recordSettingsButton->setIcon(QIcon(QStringLiteral(":/res/images/cogs.svg")));
-	recordSettingsButton->setIconSize(QSize(16, 16));
-	recordSettingsButton->setFixedSize(MixishTheme::ControlHeight, MixishTheme::ControlHeight);
-	recordSettingsButton->setFocusPolicy(Qt::NoFocus);
-	recordSettingsButton->setToolTip(tr("Recording settings"));
-	connect(recordSettingsButton, &QToolButton::clicked, this,
-		[this]() { switcher->OpenRecordingSettings(); });
-	recordGroup->addWidget(recordSettingsButton);
+	/* PlayList opens the playlist manager panel that sits next to the audio
+	 * mixer; it lives here so it is next to Record. */
+	playlistButton = new QPushButton(tr("PlayList"), this);
+	playlistButton->setObjectName(QStringLiteral("mixishPlaylistButton"));
+	MixishTheme::SetVariant(playlistButton, "secondary");
+	playlistButton->setFixedHeight(MixishTheme::ControlHeight);
+	playlistButton->setMinimumWidth(128);
+	playlistButton->setFocusPolicy(Qt::NoFocus);
+	playlistButton->setToolTip(tr("Show the playlist queue panel"));
+	connect(playlistButton, &QPushButton::clicked, this, [this]() {
+		if (switcher && switcher->GetInputBar())
+			switcher->GetInputBar()->ShowPlaylistManager();
+	});
+	layout->addWidget(playlistButton);
 
 	recordButton = new QPushButton(tr("Record"), this);
 	recordButton->setObjectName(QStringLiteral("mixishRecordButton"));
@@ -95,14 +118,34 @@ MixishBottomBar::MixishBottomBar(MixishSwitcher *switcher_, QWidget *parent)
 			obs_frontend_recording_start();
 		Refresh();
 	});
-	recordGroup->addWidget(recordButton);
-	layout->addLayout(recordGroup);
 
-	layout->addSpacing(MixishTheme::Space4);
+	recordSettingsButton = new QToolButton(this);
+	recordSettingsButton->setObjectName(QStringLiteral("mixishRecordSettings"));
+	MixishTheme::SetVariant(recordSettingsButton, "icon");
+	recordSettingsButton->setIcon(QIcon(QStringLiteral(":/res/images/cogs.svg")));
+	recordSettingsButton->setIconSize(QSize(16, 16));
+	recordSettingsButton->setFixedSize(MixishTheme::ControlHeight, MixishTheme::ControlHeight);
+	recordSettingsButton->setFocusPolicy(Qt::NoFocus);
+	recordSettingsButton->setToolTip(tr("Recording settings"));
+	connect(recordSettingsButton, &QToolButton::clicked, this,
+		[this]() { switcher->OpenRecordingSettings(); });
 
-	/* Stream group. */
-	auto *streamGroup = new QHBoxLayout();
-	streamGroup->setSpacing(MixishTheme::Space1);
+	layout->addWidget(MakeSplitGroup(this, recordButton, recordSettingsButton));
+
+	streamButton = new QPushButton(tr("Stream"), this);
+	streamButton->setObjectName(QStringLiteral("mixishStreamButton"));
+	MixishTheme::SetVariant(streamButton, "secondary");
+	streamButton->setFixedHeight(MixishTheme::ControlHeight);
+	streamButton->setMinimumWidth(128);
+	streamButton->setFocusPolicy(Qt::NoFocus);
+	streamButton->setToolTip(tr("Start or stop streaming"));
+	connect(streamButton, &QPushButton::clicked, this, [this]() {
+		if (obs_frontend_streaming_active())
+			obs_frontend_streaming_stop();
+		else
+			obs_frontend_streaming_start();
+		Refresh();
+	});
 
 	streamSettingsButton = new QToolButton(this);
 	streamSettingsButton->setObjectName(QStringLiteral("mixishStreamSettings"));
@@ -111,45 +154,11 @@ MixishBottomBar::MixishBottomBar(MixishSwitcher *switcher_, QWidget *parent)
 	streamSettingsButton->setIconSize(QSize(16, 16));
 	streamSettingsButton->setFixedSize(MixishTheme::ControlHeight, MixishTheme::ControlHeight);
 	streamSettingsButton->setFocusPolicy(Qt::NoFocus);
-	streamSettingsButton->setToolTip(tr("Stream settings"));
+	streamSettingsButton->setToolTip(tr("Streaming settings"));
 	connect(streamSettingsButton, &QToolButton::clicked, this,
 		[this]() { switcher->OpenStreamingSettings(); });
-	streamGroup->addWidget(streamSettingsButton);
 
-	streamButton = new QToolButton(this);
-	streamButton->setObjectName(QStringLiteral("mixishStreamButton"));
-	MixishTheme::SetVariant(streamButton, "secondary");
-	streamButton->setText(tr("Stream"));
-	streamButton->setPopupMode(QToolButton::MenuButtonPopup);
-	streamButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
-	streamButton->setFixedHeight(MixishTheme::ControlHeight);
-	streamButton->setMinimumWidth(128);
-	streamButton->setFocusPolicy(Qt::NoFocus);
-	streamButton->setToolTip(tr("Start or stop streaming"));
-
-	streamMenu = new QMenu(streamButton);
-	streamSettingsAction = streamMenu->addAction(tr("Stream Settings…"));
-	connect(streamSettingsAction, &QAction::triggered, this,
-		[this]() { switcher->OpenOutputSettings(); });
-	streamMenu->addSeparator();
-	stopStreamAction = streamMenu->addAction(tr("Stop Streaming"));
-	stopStreamAction->setEnabled(false);
-	connect(stopStreamAction, &QAction::triggered, this, [this]() {
-		if (obs_frontend_streaming_active())
-			obs_frontend_streaming_stop();
-		Refresh();
-	});
-	streamButton->setMenu(streamMenu);
-
-	connect(streamButton, &QToolButton::clicked, this, [this]() {
-		if (obs_frontend_streaming_active())
-			obs_frontend_streaming_stop();
-		else
-			obs_frontend_streaming_start();
-		Refresh();
-	});
-	streamGroup->addWidget(streamButton);
-	layout->addLayout(streamGroup);
+	layout->addWidget(MakeSplitGroup(this, streamButton, streamSettingsButton));
 
 	stateTimer = new QTimer(this);
 	stateTimer->setInterval(500);
@@ -202,8 +211,4 @@ void MixishBottomBar::Refresh()
 		MixishTheme::SetState(streamButton, streaming ? "onAir" : "idle");
 	}
 
-	if (stopStreamAction) {
-		QSignalBlocker block(stopStreamAction);
-		stopStreamAction->setEnabled(streamActive);
-	}
 }

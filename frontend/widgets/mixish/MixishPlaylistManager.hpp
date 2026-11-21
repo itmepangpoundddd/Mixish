@@ -43,6 +43,7 @@ public:
 	~MixishPlaylistManager() override;
 
 	MixishPlaylistController *CreatePlaylist(const QStringList &files, int number = 0);
+	void DeletePlaylist(MixishPlaylistController *controller);
 	MixishPlaylistController *FindByScene(obs_source_t *sceneSource) const;
 	const QVector<MixishPlaylistController *> &Playlists() const { return playlists; }
 

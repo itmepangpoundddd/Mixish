@@ -27,6 +27,7 @@
 #include <QPushButton>
 #include <QSlider>
 #include <QSizePolicy>
+#include <QTimer>
 
 #include "moc_MixishMediaTransport.cpp"
 
@@ -55,6 +56,7 @@ MixishMediaTransport::MixishMediaTransport(QWidget *parent) : QFrame(parent)
 	/* MediaControls puts its seek slider next to an expanding spacer, which
 	 * leaves the slider without room in a normal widget. Give it the space. */
 	QSlider *seek = controls->findChild<QSlider *>(QStringLiteral("slider"));
+	seekSlider = seek;
 	if (seek) {
 		seek->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 		seek->setMinimumWidth(120);
@@ -76,6 +78,16 @@ MixishMediaTransport::MixishMediaTransport(QWidget *parent) : QFrame(parent)
 
 	previousButton = controls->findChild<QPushButton *>(QStringLiteral("previousButton"));
 	nextButton = controls->findChild<QPushButton *>(QStringLiteral("nextButton"));
+
+	/* The timecode and the seek bar turn into the warning colour in the last
+	 * seconds of a clip, so the operator sees an item about to end without
+	 * watching the monitor. */
+	timerLabel = controls->findChild<QLabel *>(QStringLiteral("timerLabel"));
+	durationLabel = controls->findChild<QLabel *>(QStringLiteral("durationLabel"));
+
+	endingTimer = new QTimer(this);
+	endingTimer->setInterval(200);
+	connect(endingTimer, &QTimer::timeout, this, &MixishMediaTransport::UpdateEndingState);
 
 	/* MediaControls owns the play button. Watch it in parallel so an
 	 * intentional play is never mistaken for automatic playback. */
@@ -123,6 +135,52 @@ void MixishMediaTransport::SetSource(obs_source_t *newSource, bool hasInput)
 	}
 
 	UpdateQueueButtons();
+
+	if (newSource) {
+		UpdateEndingState();
+		if (endingTimer)
+			endingTimer->start();
+	} else {
+		if (endingTimer)
+			endingTimer->stop();
+		/* Clearing happens inside UpdateEndingState(), otherwise the
+		 * labels would keep the warning colour after unbinding. */
+		UpdateEndingState();
+	}
+}
+
+/* Marks both timecode labels and the seek bar while the bound media is within
+ * ten seconds of its end. Re-polishing only happens when the state flips, not
+ * per tick. */
+void MixishMediaTransport::UpdateEndingState()
+{
+	bool warn = false;
+
+	if (source) {
+		const int64_t duration = obs_source_media_get_duration(source);
+		if (duration > 0) {
+			const int64_t time = obs_source_media_get_time(source);
+			const int64_t remaining = duration - time;
+			warn = remaining > 0 && remaining <= 10000;
+		}
+	}
+
+	if (warn == ending)
+		return;
+
+	ending = warn;
+
+	for (QLabel *label : {timerLabel, durationLabel}) {
+		if (!label)
+			continue;
+		label->setProperty("mixishEnding", warn);
+		MixishTheme::Repolish(label);
+	}
+
+	if (seekSlider) {
+		seekSlider->setProperty("mixishEnding", warn);
+		MixishTheme::Repolish(seekSlider);
+	}
 }
 
 void MixishMediaTransport::SetPlaceholder(const QString &text)

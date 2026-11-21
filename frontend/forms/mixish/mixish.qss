@@ -343,7 +343,7 @@ QPushButton[mixishRole="tileOverlay"] {
 	font-size: 12px;
 	font-weight: 700;
 }
-QPushButton#mixishOverlayAllOff,
+QPushButton#mixishOverlayAll,
 QPushButton#mixishOverlayEdit {
 	padding: 0 8px;
 }
@@ -382,6 +382,18 @@ QFrame#mixishVideoControls QLabel {
 	color: #B8B8B8;
 	font-size: 12px;
 }
+/* End-of-clip warning in the last 10 s of a clip: the timecode and the
+ * seek bar turn red so an item about to end is visible at a glance. */
+QFrame#mixishVideoControls QLabel[mixishEnding="true"] {
+	color: #FF5C5C;
+	font-weight: 600;
+}
+QFrame#mixishVideoControls QSlider[mixishEnding="true"]::sub-page:horizontal {
+	background-color: #FF5C5C;
+}
+QFrame#mixishVideoControls QSlider[mixishEnding="true"]::handle:horizontal {
+	background-color: #FF5C5C;
+}
 QFrame#mixishVideoControls QSlider::groove:horizontal {
 	height: 4px;
 	background-color: #3A3A3A;
@@ -410,12 +422,13 @@ QFrame#mixishAudioMixer QScrollArea {
 }
 QFrame#mixishPlaylistPanel {
 	background-color: #181818;
-	border-left: 1px solid #3A3A3A;
+	border: 1px solid #3A3A3A;
 }
 QComboBox#mixishPlaylistCombo {
 	padding-left: 8px;
 }
-QListWidget#mixishPlaylistList {
+QListWidget#mixishPlaylistList,
+QListWidget#mixishPlaylistAvailable {
 	background-color: #121212;
 	color: #F1F1F1;
 	border: 1px solid #3A3A3A;
@@ -423,16 +436,19 @@ QListWidget#mixishPlaylistList {
 	padding: 2px;
 	outline: 0px;
 }
-QListWidget#mixishPlaylistList::item {
+QListWidget#mixishPlaylistList::item,
+QListWidget#mixishPlaylistAvailable::item {
 	color: #D8D8D8;
 	padding: 4px 6px;
 	border-radius: 3px;
 }
-QListWidget#mixishPlaylistList::item:selected {
+QListWidget#mixishPlaylistList::item:selected,
+QListWidget#mixishPlaylistAvailable::item:selected {
 	background-color: #4C8DFF;
 	color: #0B1220;
 }
-QListWidget#mixishPlaylistList::item:hover:!selected {
+QListWidget#mixishPlaylistList::item:hover:!selected,
+QListWidget#mixishPlaylistAvailable::item:hover:!selected {
 	background-color: #242424;
 	color: #FFFFFF;
 }
@@ -543,6 +559,32 @@ QToolButton#mixishMasterMute:checked {
 QFrame#mixishBottomBar {
 	background-color: #181818;
 	border-top: 1px solid #3A3A3A;
+}
+
+/* Split button: a text action welded to a trailing gear segment, so Record and
+ * Stream read as one control like the Add Input button. The rules come after
+ * the variant/state rules above so the welded edges win. */
+QFrame[mixishSplit="group"] {
+	background-color: transparent;
+	border: 0px;
+}
+QPushButton[mixishSplit="start"] {
+	border-top-right-radius: 0px;
+	border-bottom-right-radius: 0px;
+	border-right: 0px;
+}
+QPushButton[mixishSplit="start"]:hover,
+QPushButton[mixishSplit="start"]:pressed,
+QPushButton[mixishSplit="start"]:disabled {
+	border-right: 0px;
+}
+QToolButton[mixishSplit="end"] {
+	border-top-left-radius: 0px;
+	border-bottom-left-radius: 0px;
+	border-left: 1px solid #3A3A3A;
+}
+QToolButton[mixishSplit="end"]:hover {
+	border-left-color: #555555;
 }
 
 QListWidget#mixishRecordingFormats {

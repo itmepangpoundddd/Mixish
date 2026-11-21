@@ -24,8 +24,8 @@ class MixishSwitcher;
 class QPushButton;
 class QVBoxLayout;
 
-/* Master overlay strip: one button per overlay channel plus All Off.
- * Lives in the transition column directly below FTB. */
+/* Master overlay strip: one button per overlay channel plus a single
+ * All On / All Off switch. Lives in the transition column directly below FTB. */
 class MixishOverlayStrip : public QFrame {
 	Q_OBJECT
 
@@ -36,9 +36,11 @@ public:
 
 private:
 	void OnChannelClicked(int index);
+	void OnAllClicked();
+	bool AnyOnAir() const;
 
 	MixishSwitcher *switcher = nullptr;
 
 	QVector<QPushButton *> channelButtons;
-	QPushButton *allOffButton = nullptr;
+	QPushButton *allButton = nullptr;
 };

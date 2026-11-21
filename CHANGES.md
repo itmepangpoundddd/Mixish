@@ -5,15 +5,61 @@ OBS Studio is licensed under GPL-2.0-or-later. Mixish keeps all original OBS
 copyright and license notices, and adds Mixish copyright notices only to new or
 modified work.
 
-## 0.0.3 work in progress
+## Release 0.0.3
+
+- Version bumped from `0.0.2` to `0.0.3` in `README.md`, `README.rst` and `installer/mixish.iss` (AppVersion, AppVerName, output filename and VersionInfoVersion).
+- Release contents: the PlayList queue panel tab and the PlayList manager window, the split Record/Stream buttons, the input transport end-of-item warning (red seek bar and timecode), the Program transport removed so the Program monitor keeps its full height, the program VU meter beside the transition column, five overlay channels with an All On/Off switch, HLS passthrough as a single stream item, and the shutdown source-leak crash fix. Per-file details follow in the sections below.
+- `RELEASE_NOTES.md` - release notes for GitHub Releases.
+- Installer: `G:\Mixish\dist\Mixish-Setup-0.0.3-x64.exe` (Inno Setup 7, `"C:\Program Files\Inno Setup 7\ISCC.exe" installer\mixish.iss`).
+- Installer size INSTALLER_SIZE_PLACEHOLDER; SHA-256 `INSTALLER_SHA_PLACEHOLDER`.
+- Built binaries report `0.0.3` (`CMAKE_PROJECT_VERSION` / `OBS_VERSION` from the v0.0.3 tag).
+- Tag: `v0.0.3`, published as a GitHub Release with the installer and its checksum attached.
+
+### PlayList: queue panel tab and bottom bar button
+
+- `MixishPlaylistPanel.cpp` / `.hpp` - the queue editor (playlist selector, `New` / `Delete`, `Add` / `Add URL…` / `Edit` / `Remove`, queue list, `▲` / `▼`, `Play Out`, `Stop` / `Previous` / `Next`, `Auto Next` / `Auto First` / `Loop`) is a panel in the input bar, opened as a tab next to the Audio Mixer. It edits the selected Playlist input's queue and does not own a second queue.
+- `MixishInputBar.cpp` / `.hpp` - the INPUTS header has `List` and `Audio Mixer` tabs that show one panel at a time; the `List` tab is enabled only while a Playlist input is selected and closes when the selection moves away. `ShowPlaylistPanel()` opens it for the bottom bar.
+- `MixishBottomBar.cpp` / `.hpp` - a `PlayList` button sits next to Record and opens the **PlayList manager window** (`MixishPlaylistWindow`, in `MixishPlaylistPanel.cpp`): name combo plus `New PlayList` / `Delete PlayList`, `Available Inputs` on the left, the queue on the right with `>` / `<` and `▲` / `▼`, `Loop` / `Begin from selected item` / `Clear Overlays` / `Manual Mode`, and `Stop` / `Previous` / `Next` / `Close`. Queue entries are inputs (stored by UUID, so deleted ones show as `(missing)`); playing one cuts it to Program, and unless `Manual Mode` is set the window advances when the running input's media reports `OBS_MEDIA_STATE_ENDED`. Lists and options persist in `collectionModuleData["mixish_playlist_manager"]`.
+- The List panel button row is a four-column grid with ignoring size policies, so the transport and option buttons can no longer overlap when the panel is narrow.
+- `MixishPlaylistManager.cpp` / `.hpp` - `CreatePlaylist()` accepts an empty file list (used by `New`) and `DeletePlaylist()` removes a playlist input cleanly. `MixishPlaylistController.cpp` / `.hpp` - `MoveItem(from, to)` reorders the queue and keeps the current item.
+- `mixish.qss` - `QFrame#mixishPlaylistPanel` keeps the dark window background.
+- `MixishBottomBar.cpp` / `.hpp` - Record and Stream are now split buttons shaped like `Add Input`: the text action is welded to a trailing gear segment (the old separate gear buttons are gone, so nothing is a different height any more). The gear opens the recording/streaming settings directly; the Stream menu it replaces only repeated that dialog plus `Stop Streaming`, which the button itself still does. Every gap in the bar is `Space4` (16 px) and the labelled buttons share a 128 px minimum width.
+- `mixish.qss` - new `[mixishSplit="start"|"end"|"group"]` rules square off the welded edges and draw the divider; they are placed after the variant/state rules so `onAir` still recolours Record and Stream.
+
+### Input transport: end-of-item warning and program VU meter
+
+- `MixishMediaTransport.cpp` / `.hpp` - the shared transport (INPUTS header and Program monitor) polls the bound media source every 200 ms; when a clip has 10 s or less left, both timecode labels get the dynamic property `mixishEnding` and are re-polished, so the timecode turns red before the item ends. The property is only re-applied when the state flips, not on every tick, and it is cleared when the source is unbound. Works for video and media-list inputs because both go through the same `MediaControls`.
+- `mixish.qss` - `QFrame#mixishVideoControls` `QLabel[mixishEnding="true"]` is `#FF5C5C` semi-bold, and `QSlider[mixishEnding="true"]` turns its filled sub-page and handle red too, so the bar itself warns while the clip runs out. The selector is scoped to the INPUTS transport so OBS's own source toolbar is untouched.
+- `MixishProgramTransport.cpp` / `.hpp` - the transport row under the Program monitor (queue info, previous / next, seek bar, timecode) is removed, so the Program monitor keeps the full height. `MixishSwitcher` no longer creates, syncs or shows it; the playlist still advances on `OBS_MEDIA_STATE_ENDED` and can be driven from the PlayList manager window. The widget source files stay in the tree (CMake cannot be reconfigured here) but nothing instantiates them.
+- `MixishTransitionPanel.cpp` / `.hpp` - a narrow vertical program VU meter (`MixishVuMeter`, stereo, green/yellow/red zones, peak hold) sits to the right of the transition column (panel width 232 -> 250 px). It polls `obs_get_master_peak_channel()` at 50 ms with the same ballistics as the Audio Mixer master meter, so the level is readable without opening the mixer. The panel keeps a silent `audio_output_connect()` sink of its own, because libobs only renders the program mix while an output is connected and the Audio Mixer tab may never have been opened.
+
+
+### Overlays: five channels and an All On/Off switch
+
+- `MixishOverlayController.hpp` / `.cpp` - `MaxChannels` raised from 4 to 5 (fifth channel colour `#E55C73`), plus a new `AllOn()` that turns every assigned channel on. The overlay strip, editor panel and input-tile assignment buttons all follow `ChannelCount()`, so channel 5 appears everywhere without further changes.
+- `MixishOverlayStrip.cpp` / `.hpp` - the header button is now a single switch: it reads `All Off` and turns every channel off while any channel is on air, and reads `All On` and turns every assigned channel on when nothing is. It is disabled when no channel is assigned. Button object name changed to `mixishOverlayAll` (styles updated in `mixish.qss`).
 
 ### Playlist HLS passthrough
 
 - `MixishPlaylistManager.cpp` - a local `.m3u`/`.m3u8` whose first 64 KB contains a `#EXT-X-` tag is now treated as a real HLS playlist and added to the queue as **one** item (`stream = true`) instead of being expanded into separate segment entries. Remote `.m3u`/`.m3u8` URLs are added as a single stream item without fetching them. Mixish queue files (only `#EXTM3U`/`#EXTINF`) still expand exactly as in 0.0.2.
-- `MixishPlaylistController.cpp` / `.hpp` - stream items keep the existing native media-source path (local file or URL) with format auto-detection; duration probing, `RecheckItems` and the background probe skip stream items. A 2 s post-start check marks an item `streamError` when the media source reports `OBS_MEDIA_STATE_ERROR`; the flag is transient and never saved.
+- `MixishPlaylistController.cpp` / `.hpp` - stream items keep the existing native media-source path (local file or URL) with format auto-detection; duration probing, `RecheckItems` and the background probe skip stream items. A 2.5 s post-start check marks an item `streamError` when the source has produced no video yet; the flag is transient and never saved (see the runtime verification section for why that signal is used instead of the media state).
 - `MixishPlaylistPanel.cpp` / `.hpp` - duration column shows `LIVE` for streams and `ERROR` (error color) for a failed stream, and a new `Add URL…` button accepts http/https HLS URLs.
 - Persistence: new optional `stream` bool per queue item; missing key loads as `false`, so 0.0.2 scene collections are unchanged.
-- Build: `build_x64_local\frontend\obs-studio.vcxproj` RelWithDebInfo x64 compiles and links cleanly. Runtime verification (local HLS VOD, live URL, queue file, bad URL, restart) is still pending.
+- Build: `build_x64_local\frontend\obs-studio.vcxproj` RelWithDebInfo x64 compiles and links cleanly. Runtime verification: see below.
+
+#### HLS runtime verification (2026-11-19)
+
+Run against the RelWithDebInfo x64 build with the real profile, using an isolated `HlsTest` scene collection (a copy of the user's collection) that `tools/mixish_hls/make_hls_collection.py` recreates on demand. The app is closed with `WM_CLOSE` only - no mouse or keyboard automation. Test media: a local HLS VOD (12 s, 6 segments) and a sliding-window live playlist produced by ffmpeg, both served over `http://127.0.0.1:8089` so stream items take the real URL path.
+
+- Local HLS VOD: the media source opens the `.m3u8` (FFmpeg detects `hls`), plays to the end and the queue advances. A 75.4 s program recording from that run holds 2262 decoded H.264 frames plus 48 kHz AAC, which proves frames came out of the HLS demuxer and were rendered.
+- LIVE: a sliding-window playlist (`#EXT-X-MEDIA-SEQUENCE` advancing, 3 segments, no `#EXT-X-ENDLIST`) plays continuously for 22 s with no error and no end-of-queue; its recording holds 833 decoded frames.
+- Bad URL (`http://127.0.0.1:8089/missing.m3u8`, HTTP 404): the item is flagged `streamError`, the log records `Mixish playlist: stream error for ...` about 2.5 s after the switch, and the panel shows `ERROR`.
+- Restart: the queue, the `stream` flag and the current index survive a full close and relaunch.
+- All runs: clean exit, exit code 0, no new crash files (7 closes across the cases), no orphan-source or `Double destroy` logs.
+- Bug found and fixed by these tests: the original 2 s check looked at `OBS_MEDIA_STATE_ERROR`, which `obs-ffmpeg-source.c` **never** sets (it only uses STOPPED/PLAYING/PAUSED/ENDED). A failed HLS open therefore never reached `streamError`: the item stayed `LIVE` while nothing played, and libobs retried the dead endpoint every 10 s. `media_started` is not usable either - `ffmpeg_source_restart()` sets PLAYING without emitting it, while `ffmpeg_source_start()` emits it even when the open failed - so the check now runs at 2.5 s and reports an error when the source still has no video (`obs_source_get_width() == 0`), the only honest "frames arrived" signal available without a libobs change.
+- Known limitation of that check: an audio-only HLS stream has no video size and would be shown as `ERROR` while its audio plays. Noted instead of adding a libobs change, since Mixish playlists are video.
+- Not covered: importing an existing Mixish queue file (`.m3u` with only `#EXTM3U`/`#EXTINF`) goes through the Add-file dialog. That code path is untouched by this fix and identical to 0.0.2, but it still needs one manual import to be called verified.
+- Side effects reverted: `user.ini` points at `Untitled` again, the `HlsTest` collection file is deleted, and `Untitled.json` hashes identical to its pre-test backup.
 
 ### Shutdown stability (crash fix)
 

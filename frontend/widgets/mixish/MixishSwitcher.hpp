@@ -37,7 +37,6 @@
 
 class MixishPlaylistController;
 class MixishPlaylistManager;
-class MixishProgramTransport;
 class OBSBasic;
 class QAction;
 class QActionGroup;
@@ -93,7 +92,7 @@ public:
 	void OpenOutputSettings();
 	void OpenRecordingSettings();
 	void OpenStreamingSettings();
-	void DeleteScene(OBSScene scene);
+	void DeleteScene(OBSScene scene, bool ask = true);
 	void OpenSceneMenu(OBSScene scene, QWidget *anchor);
 	void OpenInputProperties(OBSScene scene, int number = 0);
 	void RefreshSceneTiles();
@@ -131,8 +130,7 @@ private:
 	void ApplyDockState();
 	void SaveSplitterState();
 	void RestoreSplitterState();
-	void EnsureProgramTransport();
-	void UpdateProgramTransport();
+
 
 	/* Mixish input lifecycle.
 	 *
@@ -201,8 +199,6 @@ private:
 	QPointer<MixishOverlayController> overlayController;
 	QPointer<MixishOverlayPanel> overlayPanel;
 	QPointer<MixishPlaylistManager> playlistManager;
-	QPointer<MixishProgramTransport> programTransport;
-	QPointer<MixishPlaylistController> programPlaylist;
 	QPointer<MixishTransitionPanel> transitionPanel;
 	QPointer<MixishInputBar> inputBar;
 	QPointer<MixishInputProperties> inputProperties;

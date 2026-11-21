@@ -24,6 +24,8 @@
 class MediaControls;
 class QLabel;
 class QPushButton;
+class QSlider;
+class QTimer;
 
 /* One reusable media transport, built on OBS's MediaControls.
  *
@@ -58,12 +60,18 @@ signals:
 
 private:
 	void UpdateQueueButtons();
+	void UpdateEndingState();
 
 	MediaControls *controls = nullptr;
 	QLabel *placeholder = nullptr;
+	QLabel *timerLabel = nullptr;
+	QLabel *durationLabel = nullptr;
 	QPushButton *previousButton = nullptr;
 	QPushButton *nextButton = nullptr;
+	QSlider *seekSlider = nullptr;
+	QTimer *endingTimer = nullptr;
 	OBSSource source;
 	bool queueNavigation = false;
 	bool queueSignalsConnected = false;
+	bool ending = false;
 };

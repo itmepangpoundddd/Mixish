@@ -25,6 +25,7 @@
 class MixishInputTile;
 class MixishPlaylistController;
 class MixishPlaylistPanel;
+class MixishPlaylistWindow;
 class MixishSwitcher;
 class MixishVideoControls;
 class MixishAudioMixer;
@@ -69,6 +70,12 @@ public:
 	/* Re-reads the audio mixer master device and source list. */
 	void RefreshAudioMixer();
 
+	/* Shows the playlist queue panel (the List tab). */
+	void ShowPlaylistPanel();
+
+	/* Opens the PlayList manager window (the bottom bar's PlayList button). */
+	void ShowPlaylistManager();
+
 protected:
 	bool eventFilter(QObject *object, QEvent *event) override;
 
@@ -79,7 +86,7 @@ private slots:
 	void RequestNextThumbnail();
 
 private:
-	enum class InputPanelMode { None, Mixer, Playlist };
+	enum class InputPanelMode { None, Playlist, Mixer };
 
 	void ClearTiles();
 	void UpdateVideoControls();
@@ -99,6 +106,7 @@ private:
 	QPointer<MixishVideoControls> videoControls;
 	QPointer<MixishAudioMixer> audioMixer;
 	QPointer<MixishPlaylistPanel> playlistPanel;
+	QPointer<MixishPlaylistWindow> playlistWindow;
 	QPointer<QPushButton> mixerToggle;
 	QPointer<QPushButton> playlistToggle;
 	QPointer<MixishPlaylistController> panelController;
@@ -109,6 +117,5 @@ private:
 	QPointer<MixishInputTile> selectedTile;
 
 	InputPanelMode panelMode = InputPanelMode::None;
-	bool mixerRestoreOnPlaylistExit = false;
 	int thumbnailIndex = 0;
 };

@@ -79,6 +79,7 @@ public:
 	void SetAutoFirst(bool value);
 	void AddItems(const QVector<MixishPlaylistItem> &newItems);
 	void RemoveItems(const QVector<int> &indexes);
+	void MoveItem(int from, int to);
 	void ReplaceItem(int index, const MixishPlaylistItem &item);
 	void SetItemDuration(int index, double seconds);
 	void SetMissing(int index, bool missing);

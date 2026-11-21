@@ -535,15 +535,22 @@ bool MixishPlaylistController::SwitchTo(int index, bool autoPlay)
 
 	if (autoPlay && item.stream) {
 		const QString streamPath = item.path;
-		QTimer::singleShot(2000, this, [this, checkToken, index, streamPath]() {
+		QTimer::singleShot(2500, this, [this, checkToken, index, streamPath]() {
 			if (streamToken != checkToken || index < 0 || index >= items.size())
 				return;
 			MixishPlaylistItem &streamItem = items[index];
 			if (!streamItem.stream || streamItem.path != streamPath ||
 			    streamItem.streamError)
 				return;
-			if (!media ||
-			    obs_source_media_get_state(media.Get()) != OBS_MEDIA_STATE_ERROR)
+
+			/* Neither media_started nor the media state separates a dead
+			 * HLS endpoint from a working one: ffmpeg_source switches to
+			 * PLAYING before the media thread has opened anything, it emits
+			 * media_started even when the open failed, and it never reports
+			 * OBS_MEDIA_STATE_ERROR. Frames on the source are the only
+			 * honest signal, so a stream that has produced no video yet is
+			 * reported as an error. */
+			if (media && obs_source_get_width(media.Get()) > 0)
 				return;
 
 			streamItem.streamError = true;
@@ -674,6 +681,26 @@ void MixishPlaylistController::RemoveItems(const QVector<int> &indexes)
 			RestoreCurrent(currentRemoved && playlistVisible);
 	}
 
+	emit Changed();
+	if (manager)
+		manager->QueueEdited(this);
+}
+
+void MixishPlaylistController::MoveItem(int from, int to)
+{
+	if (from < 0 || from >= items.size() || to < 0 || to >= items.size() || from == to)
+		return;
+
+	items.move(from, to);
+
+	if (current == from)
+		current = to;
+	else if (from < current && to >= current)
+		--current;
+	else if (from > current && to <= current)
+		++current;
+
+	emit CurrentChanged(current);
 	emit Changed();
 	if (manager)
 		manager->QueueEdited(this);

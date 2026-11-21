@@ -45,10 +45,10 @@ class MixishOverlayController : public QObject {
 	Q_OBJECT
 
 public:
-	static constexpr int MaxChannels = 4;
+	static constexpr int MaxChannels = 5;
 	static constexpr int FirstVideoChannel = 16;
 
-	/* All four channels are active since stage (b) of the overlay work. */
+	/* All five channels are active. */
 	static constexpr int ActiveChannels = MaxChannels;
 
 	MixishOverlayController(MixishSwitcher *switcher, OBSBasic *main);
@@ -90,6 +90,7 @@ public:
 	void SetCrop(int index, const obs_sceneitem_crop &crop);
 	void ResetRect(int index);
 	void AllOff();
+	void AllOn();
 
 	/* Re-resolve assignments after a scene collection switch. */
 	void ReloadChannels();

@@ -157,12 +157,10 @@ MixishPlaylistManager::~MixishPlaylistManager()
 
 MixishPlaylistController *MixishPlaylistManager::CreatePlaylist(const QStringList &files, int number)
 {
-	if (shuttingDown || collectionChanging || !main || !switcher || files.isEmpty())
+	if (shuttingDown || collectionChanging || !main || !switcher)
 		return nullptr;
 
 	QVector<MixishPlaylistItem> items = BuildItems(files);
-	if (items.isEmpty())
-		return nullptr;
 
 	int first = -1;
 	for (int i = 0; i < items.size(); ++i) {
@@ -171,9 +169,6 @@ MixishPlaylistController *MixishPlaylistManager::CreatePlaylist(const QStringLis
 			break;
 		}
 	}
-	if (first < 0)
-		return nullptr;
-
 	QString base;
 	for (int suffix = 1;; ++suffix) {
 		const QString candidate =
@@ -191,12 +186,17 @@ MixishPlaylistController *MixishPlaylistManager::CreatePlaylist(const QStringLis
 	obs_data_set_bool(settings, "restart_on_activate", true);
 	obs_data_set_bool(settings, "close_when_inactive", false);
 
-	if (PathIsRemote(items[first].path)) {
-		obs_data_set_bool(settings, "is_local_file", false);
-		obs_data_set_string(settings, "input", items[first].path.toUtf8().constData());
-	} else {
-		obs_data_set_bool(settings, "is_local_file", true);
-		obs_data_set_string(settings, "local_file", items[first].path.toUtf8().constData());
+	/* New Playlist creates an empty input; the operator fills the queue
+	 * from the panel. */
+	if (first >= 0) {
+		if (PathIsRemote(items[first].path)) {
+			obs_data_set_bool(settings, "is_local_file", false);
+			obs_data_set_string(settings, "input", items[first].path.toUtf8().constData());
+		} else {
+			obs_data_set_bool(settings, "is_local_file", true);
+			obs_data_set_string(settings, "local_file",
+					    items[first].path.toUtf8().constData());
+		}
 	}
 
 	OBSSourceAutoRelease source = obs_source_create("ffmpeg_source", mediaName.toUtf8().constData(),
@@ -233,6 +233,34 @@ MixishPlaylistController *MixishPlaylistManager::CreatePlaylist(const QStringLis
 	     sceneUuid.toUtf8().constData(), int(items.size()));
 
 	return controller;
+}
+
+void MixishPlaylistManager::DeletePlaylist(MixishPlaylistController *controller)
+{
+	if (!controller || shuttingDown || collectionChanging)
+		return;
+
+	OBSScene scene = controller->Scene();
+
+	/* Take the playlist off the queue first so nothing looks the controller
+	 * up while the scene is being removed. */
+	controller->SetPlaylistVisible(false);
+	controller->Stop();
+	controller->DisconnectMedia();
+
+	playlists.removeOne(controller);
+	delete controller;
+
+	/* DeleteScene confirms before removing the input and its sources. */
+	if (scene && switcher)
+		switcher->DeleteScene(scene);
+
+	if (shuttingDown)
+		return;
+
+	SaveState();
+	ScheduleSave();
+	emit PlaylistsChanged();
 }
 
 MixishPlaylistController *MixishPlaylistManager::FindByScene(obs_source_t *sceneSource) const
